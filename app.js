@@ -1,4 +1,3 @@
-
 // START OF JAVASCRIPT CODE (app.js)
 // Import Firebase SDKs
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
@@ -70,7 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     
-    let currentEditSessionOpenTimePanel = null; 
+    let currentEditSessionOpenTimePanel = null; // Timestamp for the "My edits" field session
     let lastSelectedNotePreviewElement = null;
     let isAdminModeEnabled = false;
     let currentlyViewedNotebookId = null; 
@@ -86,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const PALETTE_BASE_LIMIT = 15;
     let initialViewDetermined = false; 
-    let hasUserStartedEditingCurrentNoteText = false;
+    // let hasUserStartedEditingCurrentNoteText = false; // No longer strictly needed for "My edits" visibility
 
     let lastSavedNoteTextInPanel = "";
     let lastSavedNoteTitleInPanel = "";
@@ -296,10 +295,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if(notebooksContentDiv) notebooksContentDiv.classList.add("main-view-content-active"); 
         }
 
-        // Hide back button for main navigation views or when in "All Notes" (no specific notebook)
         if (viewName === 'notebooks' || viewName === 'settings' || viewName === 'trash' || 
             (viewName === 'notes' && !currentlyViewedNotebookId && !currentFilterTag && !isFavoritesViewActive) || 
-            (viewName === 'favorites' && !currentlyViewedNotebookId && !currentFilterTag) ) { // Added favorites here
+            (viewName === 'favorites' && !currentlyViewedNotebookId && !currentFilterTag) ) { 
             if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
         }
 
@@ -513,14 +511,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     initializeDataListeners();
 
-    // Sidebar and Main Content Area Sizing (No expansion, fixed width)
-    const fixedSidebarWidth = '7rem'; // New fixed width
+    const fixedSidebarWidth = '7rem'; 
     if (appSidebar && mainContentArea) {
         appSidebar.style.width = fixedSidebarWidth;
         mainContentArea.style.marginLeft = fixedSidebarWidth;
-        // Remove hamburger button functionality if it's not needed
-        if (hamburgerBtn) {
-            hamburgerBtn.style.display = 'none'; // Or remove it from HTML if truly not needed
+        if (hamburgerBtn) { // Hamburger button is no longer used for expansion
+            hamburgerBtn.style.display = 'none'; 
         }
     }
     
@@ -1247,6 +1243,47 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    async function saveCurrentEditDescription() {
+        if (!interactionPanelEditsMadeInputField || !currentInteractingNoteIdInPanel || isNewNoteSessionInPanel || !currentInteractingNoteOriginalNotebookId) {
+            return; // Not in a state to save an edit description
+        }
+
+        const editsDescription = interactionPanelEditsMadeInputField.value.trim();
+        if (editsDescription === "") {
+            return; // Nothing to save
+        }
+
+        if (!currentEditSessionOpenTimePanel) { // If this is the first input for this "edit session"
+            currentEditSessionOpenTimePanel = new Date();
+        }
+
+        const noteRef = doc(db, "notebooks", currentInteractingNoteOriginalNotebookId, "notes", currentInteractingNoteIdInPanel);
+        const newEditEntry = { 
+            timestamp: Timestamp.fromDate(currentEditSessionOpenTimePanel), 
+            description: editsDescription 
+        };
+
+        try {
+            // We need to fetch the note to append to its existing edits array safely
+            const noteSnap = await getDoc(noteRef);
+            if (noteSnap.exists()) {
+                const noteData = noteSnap.data();
+                const updatedEdits = [...(noteData.edits || []), newEditEntry];
+                await updateDoc(noteRef, { 
+                    edits: updatedEdits,
+                    modifiedAt: serverTimestamp() 
+                });
+                console.log("Edit description saved for note:", currentInteractingNoteIdInPanel);
+                // Do NOT clear the input field here, user might be continuing to type.
+                // Do NOT reset currentEditSessionOpenTimePanel here, it's for the current description block.
+            }
+        } catch (e) {
+            console.error("Error saving current edit description:", e);
+        }
+    }
+    const debouncedSaveEditDescription = debounce(saveCurrentEditDescription, 2500);
+
+
     function setupPanelForNewNote(notebookId, notebookName) { 
         if (currentInteractingNoteIdInPanel || isNewNoteSessionInPanel || activelyCreatingNoteId) {
             processInteractionPanelEditsOnDeselect(true); 
@@ -1258,8 +1295,8 @@ document.addEventListener('DOMContentLoaded', () => {
         currentInteractingNoteIdInPanel = null; 
         currentOpenNotebookIdForPanel = notebookId; 
         currentInteractingNoteOriginalNotebookId = null; 
-        currentEditSessionOpenTimePanel = new Date(); 
-        hasUserStartedEditingCurrentNoteText = false;
+        currentEditSessionOpenTimePanel = null; // Reset for new note
+        // hasUserStartedEditingCurrentNoteText = false; // Reset
         currentNoteTagsArrayInPanel = []; 
 
 
@@ -1272,7 +1309,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isAdminModeEnabled) { 
                 panelCreationTimeContainer.style.display = 'block';
                 if(interactionPanelCreationTimeDisplayField) {
-                    interactionPanelCreationTimeDisplayField.textContent = formatFullDateFromTimestamp(currentEditSessionOpenTimePanel); 
+                    interactionPanelCreationTimeDisplayField.textContent = formatFullDateFromTimestamp(new Date()); // Use current time for display
                     interactionPanelCreationTimeDisplayField.style.display = 'flex';
                 }
                 if(interactionPanelCreationTimeInputsContainer) interactionPanelCreationTimeInputsContainer.style.display = 'none';
@@ -1288,7 +1325,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if(interactionPanelActivityDisplayField) interactionPanelActivityDisplayField.style.display = 'none';
         
-        if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'none'; 
+        if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'none'; // Hide for new notes
+        if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; // Clear
         
         renderTagPills(); 
         updateNoteInfoPanel({ createdAt: 'PENDING_SAVE', activity: '', tags: [], edits: [] }); 
@@ -1311,15 +1349,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const noteToEdit = localNotesCache.find(n => n.id === noteId); 
         if (!noteToEdit) { clearInteractionPanel(false); return; } 
         
-        if (currentInteractingNoteIdInPanel !== noteId) { 
-            hasUserStartedEditingCurrentNoteText = false;
-        }
+        // if (currentInteractingNoteIdInPanel !== noteId) { 
+        //     hasUserStartedEditingCurrentNoteText = false; // Reset this flag
+        // }
         
         isNewNoteSessionInPanel = false; 
         currentInteractingNoteIdInPanel = noteId; 
         currentInteractingNoteOriginalNotebookId = noteToEdit.notebookId; 
         currentOpenNotebookIdForPanel = noteToEdit.notebookId; 
-        currentEditSessionOpenTimePanel = new Date(); 
+        currentEditSessionOpenTimePanel = null; // Reset for the "My edits" field for this note load
+        if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; // Clear "My edits" field
 
         lastSavedNoteTitleInPanel = noteToEdit.title || "";
         lastSavedNoteTextInPanel = noteToEdit.text || "";
@@ -1376,23 +1415,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (interactionPanelCurrentEditSessionContainer) {
             if (noteToEdit.id && !isNewNoteSessionInPanel) { 
-                if (hasUserStartedEditingCurrentNoteText && currentInteractingNoteIdInPanel === noteId) { 
-                    interactionPanelCurrentEditSessionContainer.style.display = 'block';
-                } else {
-                    interactionPanelCurrentEditSessionContainer.style.display = 'none'; 
-                    const handleFirstTextInputForEditSession = () => {
-                        if (currentInteractingNoteIdInPanel === noteId && !isNewNoteSessionInPanel) { 
-                            interactionPanelCurrentEditSessionContainer.style.display = 'block';
-                            currentEditSessionOpenTimePanel = new Date(); 
-                            if (interactionPanelEditsMadeInputField) {
-                                interactionPanelEditsMadeInputField.value = ''; 
-                            }
-                            hasUserStartedEditingCurrentNoteText = true; 
-                        }
-                    };
-                    noteTextInputField_panel.removeEventListener('input', handleFirstTextInputForEditSession); 
-                    noteTextInputField_panel.addEventListener('input', handleFirstTextInputForEditSession, { once: true });
-                }
+                interactionPanelCurrentEditSessionContainer.style.display = 'block'; // Show for existing notes
             } else { 
                 interactionPanelCurrentEditSessionContainer.style.display = 'none';
             }
@@ -1491,19 +1514,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     async function processInteractionPanelEditsOnDeselect(isSwitchingContext = false) { 
-        if (interactionPanelCurrentEditSessionContainer && interactionPanelCurrentEditSessionContainer.style.display !== 'none' && currentInteractingNoteIdInPanel) {
-            const note = localNotesCache.find(n => n.id === currentInteractingNoteIdInPanel);
-            if (note) {
-                const editsDescription = interactionPanelEditsMadeInputField ? interactionPanelEditsMadeInputField.value.trim() : "";
-                if (editsDescription !== "" && currentEditSessionOpenTimePanel) {
-                    const newEditEntry = { timestamp: Timestamp.fromDate(currentEditSessionOpenTimePanel), description: editsDescription };
-                    const updatedEdits = [...(note.edits || []), newEditEntry];
-                    try {
-                        await updateDoc(doc(db, "notebooks", note.notebookId, "notes", currentInteractingNoteIdInPanel), { edits: updatedEdits, modifiedAt: serverTimestamp() });
-                        if (interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
-                    } catch (e) { console.error("Error saving edits description:", e); }
-                }
-            }
+        // Save the "My edits" field content before clearing the panel
+        if (currentInteractingNoteIdInPanel && !isNewNoteSessionInPanel) {
+            await saveCurrentEditDescription(); // Ensure final edit description is saved
         }
         
         let noteBeingProcessedId = currentInteractingNoteIdInPanel || activelyCreatingNoteId; 
@@ -1533,6 +1546,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         }
+        // Clear the "My edits" input field and its session timestamp AFTER saving
+        if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
+        currentEditSessionOpenTimePanel = null;
     }
     function clearInteractionPanel(processEdits = true) { 
         if (processEdits) processInteractionPanelEditsOnDeselect(true); 
@@ -1545,7 +1561,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentEditSessionOpenTimePanel = null; 
         currentOpenNotebookIdForPanel = null; 
         currentInteractingNoteOriginalNotebookId = null; 
-        hasUserStartedEditingCurrentNoteText = false;
+        // hasUserStartedEditingCurrentNoteText = false; // Reset
         currentNoteTagsArrayInPanel = [];
         renderTagPills(); 
         if (lastSelectedNotePreviewElement) { 
@@ -1841,6 +1857,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (parentNotebookSnap.exists()) {
                     await updateDoc(parentNotebookRef, { notesCount: (parentNotebookSnap.data().notesCount || 0) + 1 });
                 }
+                 // After first save of a new note, the "My edits" section can be shown
+                if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'block';
+
             } catch (e) { console.error("Error creating new note:", e); alert("Failed to save new note."); }
         } else if (currentInteractingNoteIdInPanel && existingNoteData) { 
             const selectedNotebookIdInPanel = panelNotebookSelector.value; 
@@ -1979,6 +1998,9 @@ document.addEventListener('DOMContentLoaded', () => {
         interactionPanelCreationTimeInputField_time.addEventListener('input', () => {
             if(isAdminModeEnabled) debouncedHandleInteractionPanelInputChange();
         });
+    }
+    if(interactionPanelEditsMadeInputField) { // Add listener for "My edits" field
+        interactionPanelEditsMadeInputField.addEventListener('input', debouncedSaveEditDescription);
     }
     
     if (adminModeToggle) {
@@ -2479,3 +2501,4 @@ document.addEventListener('DOMContentLoaded', () => {
     clearInteractionPanel(false); 
     
 });
+// END OF JAVASCRIPT CODE (app.js)
