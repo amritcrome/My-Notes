@@ -1,4 +1,4 @@
-/* pablo Define CSS Variables for theming */
+/* Define CSS Variables for theming */
 :root {
     --theme-bg-sidebar: #047857; /* Default: emerald-700 */
     --theme-bg-sidebar-hover: #065f46; /* Darker emerald */
@@ -446,27 +446,26 @@ input:checked + .slider:before { transform: translateX(26px); }
 .fab {
     position: fixed;
     bottom: 2rem;
-    right: 2rem;
-    width: 4rem; /* Increased size */
-    height: 4rem; /* Increased size */
+    width: 4rem; 
+    height: 4rem; 
     background-image: linear-gradient(to right, var(--theme-bg-button-primary) 0%, var(--theme-border-accent) 100%);
     color: var(--theme-text-on-dark);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.1); /* Enhanced shadow */
+    box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.1); 
     cursor: pointer;
     transition: background-image 0.3s ease, transform 0.2s ease-out, opacity 0.3s ease-in-out, box-shadow 0.2s ease-in-out;
     z-index: 1000; 
     opacity: 1;
 }
 .fab i {
-    font-size: 1.5rem; /* Larger icon */
+    font-size: 1.5rem; 
 }
 .fab:hover {
     background-image: linear-gradient(to right, var(--theme-bg-button-primary-hover) 0%, var(--theme-border-accent) 100%);
-    transform: translateY(-3px) scale(1.05); /* More noticeable hover effect */
+    transform: translateY(-3px) scale(1.05); 
     box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2), 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 .fab.hidden {
@@ -474,13 +473,12 @@ input:checked + .slider:before { transform: translateX(26px); }
     transform: scale(0.5);
     pointer-events: none;
 }
-.fab-back { /* Specific class for the back button */
-    right: auto; /* Remove right positioning */
-    left: 2rem; /* Position on the left */
-    background-image: linear-gradient(to right, #6b7280 0%, #9ca3af 100%); /* Gray gradient */
+#fabCreateNote { /* Create button on the right */
+    right: 2rem;
 }
-.fab-back:hover {
-    background-image: linear-gradient(to right, #4b5563 0%, #6b7280 100%);
+.fab-back { /* Back button on the left */
+    left: 2rem; 
+    /* Color will be same as create button (default FAB style) */
 }
 
 
@@ -497,7 +495,7 @@ input:checked + .slider:before { transform: translateX(26px); }
     overflow: hidden; 
 }
 .sidebar {
-    width: 6.5rem; /* Increased collapsed width */
+    width: 7rem; /* New fixed width for sidebar */
     background-color: var(--theme-bg-sidebar); 
     color: var(--theme-text-on-dark); 
     display: flex; 
@@ -506,47 +504,37 @@ input:checked + .slider:before { transform: translateX(26px); }
     position: fixed; 
     left: 0; top: 0; bottom: 0; 
     z-index: 60; 
-    transition: width 0.3s ease-in-out; 
+    /* No transition needed for width anymore */
     overflow-x: hidden; 
-    padding-top: 0.5rem; /* Add some padding at the top */
+    padding-top: 0.75rem; 
 }
-.sidebar.expanded { 
-    width: 180px; /* Wider expanded width */
-    align-items: stretch; 
-}
+/* Remove .sidebar.expanded styles as it no longer expands */
+
 .sidebar-icon {
-    padding: 0.75rem 0.5rem; /* Adjusted padding */
+    padding: 0.85rem 0.5rem; /* Adjusted padding for better spacing */
     border-radius: 0.375rem; 
     cursor: pointer; 
     transition: background-color 0.2s ease-in-out;
     display: flex; 
-    flex-direction: column; /* Icon over text */
+    flex-direction: column; 
     align-items: center; 
     justify-content: center; 
-    text-align: center; /* Center text */
-    margin-bottom: 0.5rem; /* Space between items */
+    text-align: center; 
+    margin-bottom: 0.75rem; /* Increased space between items */
+    width: 100%; /* Ensure button takes full width of sidebar for centering */
 }
 .sidebar-icon i {
-    font-size: 1.5rem; /* Slightly larger icons */
-    margin-bottom: 0.35rem; /* Space between icon and text */
-    width: 100%; /* Ensure icon takes full width for centering */
+    font-size: 1.65rem; /* Consistent larger icon size */
+    margin-bottom: 0.5rem; /* Space between icon and text */
+    line-height: 1; /* Prevent extra space from icon's line height */
 }
 .sidebar-icon .sidebar-text { 
-    display: block; /* Always display text */
-    font-size: 0.7rem; /* Smaller text for collapsed state */
-    line-height: 1.1;
-    white-space: normal; /* Allow text to wrap if needed */
-    margin-left: 0; /* Remove margin-left */
-}
-.sidebar.expanded .sidebar-icon { 
-    padding: 1rem 0.75rem;
-}
-.sidebar.expanded .sidebar-icon i {
-    font-size: 1.65rem;
-    margin-bottom: 0.4rem;
-}
-.sidebar.expanded .sidebar-icon .sidebar-text {
-    font-size: 0.8rem; /* Slightly larger text when expanded */
+    display: block; 
+    font-size: 0.75rem; /* Slightly larger text for better readability */
+    line-height: 1.2; /* Adjust line height for text */
+    white-space: normal; 
+    margin-left: 0; 
+    max-width: 90%; /* Prevent text from touching edges */
 }
 .sidebar-icon:hover { 
     background-color: var(--theme-bg-sidebar-hover); 
@@ -554,19 +542,19 @@ input:checked + .slider:before { transform: translateX(26px); }
 .sidebar-main-navigation {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem; /* Small gap between main nav items */
+    gap: 0.25rem; 
 }
 .sidebar-bottom-icons { 
     padding-bottom: 1rem; 
-    margin-top: auto; /* Push settings to the bottom */
+    margin-top: auto; 
 }
 
 
 .main-content-area {
     flex-grow: 1; 
-    margin-left: 6.5rem; /* Adjusted for new collapsed sidebar width */
+    margin-left: 7rem; /* Fixed margin for new sidebar width */
     height: 100%; 
-    transition: margin-left 0.3s ease-in-out; 
+    /* No transition needed for margin-left anymore */
     display: flex; 
     flex-direction: column; 
     position: relative; 
