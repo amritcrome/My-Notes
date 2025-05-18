@@ -223,10 +223,10 @@ body {
     color: #FBBF24; 
 }
 .delete-note-icon i, .permanent-delete-note-icon i {
-    color: #ef4444; /* red-500 */
+    color: #ef4444; 
 }
 .restore-note-icon i {
-    color: #10b981; /* emerald-500 */
+    color: #10b981; 
 }
 .note-preview-card.selected .delete-note-icon i {
     color: #f87171; 
@@ -447,28 +447,43 @@ input:checked + .slider:before { transform: translateX(26px); }
     position: fixed;
     bottom: 2rem;
     right: 2rem;
-    width: 3.5rem; 
-    height: 3.5rem; 
-    background-color: var(--theme-bg-button-primary); 
+    width: 4rem; /* Increased size */
+    height: 4rem; /* Increased size */
+    background-image: linear-gradient(to right, var(--theme-bg-button-primary) 0%, var(--theme-border-accent) 100%);
     color: var(--theme-text-on-dark);
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 2px 4px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 6px 10px rgba(0, 0, 0, 0.15), 0 3px 6px rgba(0, 0, 0, 0.1); /* Enhanced shadow */
     cursor: pointer;
-    transition: background-color 0.3s ease, transform 0.2s ease-out, opacity 0.3s ease-in-out;
-    z-index: 40; 
+    transition: background-image 0.3s ease, transform 0.2s ease-out, opacity 0.3s ease-in-out, box-shadow 0.2s ease-in-out;
+    z-index: 1000; 
     opacity: 1;
+}
+.fab i {
+    font-size: 1.5rem; /* Larger icon */
+}
+.fab:hover {
+    background-image: linear-gradient(to right, var(--theme-bg-button-primary-hover) 0%, var(--theme-border-accent) 100%);
+    transform: translateY(-3px) scale(1.05); /* More noticeable hover effect */
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2), 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 .fab.hidden {
     opacity: 0;
+    transform: scale(0.5);
     pointer-events: none;
 }
-.fab:hover {
-    background-color: var(--theme-bg-button-primary-hover); 
-    transform: translateY(-2px);
+.fab-back { /* Specific class for the back button */
+    right: auto; /* Remove right positioning */
+    left: 2rem; /* Position on the left */
+    background-image: linear-gradient(to right, #6b7280 0%, #9ca3af 100%); /* Gray gradient */
 }
+.fab-back:hover {
+    background-image: linear-gradient(to right, #4b5563 0%, #6b7280 100%);
+}
+
+
 .confirmation-message {
     font-size: 0.75rem; 
     color: var(--theme-bg-button-primary); 
@@ -482,23 +497,74 @@ input:checked + .slider:before { transform: translateX(26px); }
     overflow: hidden; 
 }
 .sidebar {
-    width: 4rem; background-color: var(--theme-bg-sidebar); color: var(--theme-text-on-dark); display: flex; flex-direction: column;
-    justify-content: space-between; position: fixed; left: 0; top: 0; bottom: 0; z-index: 60; 
-    transition: width 0.3s ease-in-out; overflow-x: hidden; 
+    width: 6.5rem; /* Increased collapsed width */
+    background-color: var(--theme-bg-sidebar); 
+    color: var(--theme-text-on-dark); 
+    display: flex; 
+    flex-direction: column;
+    justify-content: space-between; 
+    position: fixed; 
+    left: 0; top: 0; bottom: 0; 
+    z-index: 60; 
+    transition: width 0.3s ease-in-out; 
+    overflow-x: hidden; 
+    padding-top: 0.5rem; /* Add some padding at the top */
 }
-.sidebar.expanded { width: clamp(280px, 33.33vw, 320px); align-items: stretch; }
+.sidebar.expanded { 
+    width: 180px; /* Wider expanded width */
+    align-items: stretch; 
+}
 .sidebar-icon {
-    padding: 1rem; border-radius: 0.375rem; cursor: pointer; transition: background-color 0.2s ease-in-out;
-    display: flex; align-items: center; justify-content: center; 
+    padding: 0.75rem 0.5rem; /* Adjusted padding */
+    border-radius: 0.375rem; 
+    cursor: pointer; 
+    transition: background-color 0.2s ease-in-out;
+    display: flex; 
+    flex-direction: column; /* Icon over text */
+    align-items: center; 
+    justify-content: center; 
+    text-align: center; /* Center text */
+    margin-bottom: 0.5rem; /* Space between items */
 }
-.sidebar.expanded .sidebar-icon { justify-content: flex-start; padding-left: 1rem; }
-.sidebar-icon .sidebar-text { display: none; margin-left: 0.75rem; white-space: nowrap; }
-.sidebar.expanded .sidebar-icon .sidebar-text { display: inline; }
-.sidebar-icon:hover { background-color: var(--theme-bg-sidebar-hover); }
+.sidebar-icon i {
+    font-size: 1.5rem; /* Slightly larger icons */
+    margin-bottom: 0.35rem; /* Space between icon and text */
+    width: 100%; /* Ensure icon takes full width for centering */
+}
+.sidebar-icon .sidebar-text { 
+    display: block; /* Always display text */
+    font-size: 0.7rem; /* Smaller text for collapsed state */
+    line-height: 1.1;
+    white-space: normal; /* Allow text to wrap if needed */
+    margin-left: 0; /* Remove margin-left */
+}
+.sidebar.expanded .sidebar-icon { 
+    padding: 1rem 0.75rem;
+}
+.sidebar.expanded .sidebar-icon i {
+    font-size: 1.65rem;
+    margin-bottom: 0.4rem;
+}
+.sidebar.expanded .sidebar-icon .sidebar-text {
+    font-size: 0.8rem; /* Slightly larger text when expanded */
+}
+.sidebar-icon:hover { 
+    background-color: var(--theme-bg-sidebar-hover); 
+}
+.sidebar-main-navigation {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem; /* Small gap between main nav items */
+}
+.sidebar-bottom-icons { 
+    padding-bottom: 1rem; 
+    margin-top: auto; /* Push settings to the bottom */
+}
+
 
 .main-content-area {
     flex-grow: 1; 
-    margin-left: 4rem; 
+    margin-left: 6.5rem; /* Adjusted for new collapsed sidebar width */
     height: 100%; 
     transition: margin-left 0.3s ease-in-out; 
     display: flex; 
@@ -506,7 +572,6 @@ input:checked + .slider:before { transform: translateX(26px); }
     position: relative; 
     overflow: hidden; 
 }
-.sidebar-bottom-icons { padding-bottom: 1rem; }
 
 .notebook-page-card {
     width: 200px;

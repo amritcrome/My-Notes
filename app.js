@@ -231,6 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingsNoTagsMessage = document.getElementById('settingsNoTagsMessage');
     const adminModeToggle = document.getElementById('adminModeToggle');
     const fabCreateNote = document.getElementById('fabCreateNote');
+    const fabNavigateBack = document.getElementById('fabNavigateBack');
 
     // Trash View Elements
     const deletedNotesListContainer = document.getElementById('deletedNotesListContainer');
@@ -293,6 +294,11 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             console.error("Target content for view not found:", viewName, ". Defaulting to notebooks.");
             if(notebooksContentDiv) notebooksContentDiv.classList.add("main-view-content-active"); 
+        }
+
+        // Hide back button for these views
+        if (viewName === 'notebooks' || viewName === 'settings' || viewName === 'trash') {
+            if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
         }
 
         if (viewName === 'settings' && !document.querySelector('.settings-menu-item-active')) {
@@ -506,12 +512,80 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     initializeDataListeners();
 
-    if (appSidebar && hamburgerBtn && mainContentArea) { const collapsedWidth = '4rem'; const sidebarExpandedWidthValue = 'clamp(280px, 33.33vw, 320px)'; hamburgerBtn.addEventListener('click', () => { appSidebar.classList.toggle('expanded'); mainContentArea.style.marginLeft = appSidebar.classList.contains('expanded') ? sidebarExpandedWidthValue : collapsedWidth; }); }
-    if(sidebarNotebooksPageBtn) sidebarNotebooksPageBtn.addEventListener('click', () => { isFavoritesViewActive = false; currentFilterTag = null; currentlyViewedNotebookId = null; clearInteractionPanel(true); switchToMainView('notebooks');}); 
-    if(sidebarAllNotesBtn) { sidebarAllNotesBtn.addEventListener('click', () => { isFavoritesViewActive = false; currentFilterTag = null; currentlyViewedNotebookId = null; clearInteractionPanel(true); switchToMainView('notes'); renderAllNotesPreviews(); }); }
-    if(sidebarFavoritesBtn) { sidebarFavoritesBtn.addEventListener('click', () => { isFavoritesViewActive = true; currentlyViewedNotebookId = null; currentFilterTag = null; clearInteractionPanel(true); switchToMainView('notes'); renderAllNotesPreviews(); }); }
-    if(sidebarTrashBtn) { sidebarTrashBtn.addEventListener('click', () => { isFavoritesViewActive = false; currentFilterTag = null; currentlyViewedNotebookId = null; clearInteractionPanel(true); switchToMainView('trash'); }); }
-    if(sidebarSettingsBtn) sidebarSettingsBtn.addEventListener('click', () => switchToMainView('settings'));
+    // --- Update Sidebar Width Variables in hamburgerBtn listener ---
+    if (appSidebar && hamburgerBtn && mainContentArea) { 
+        const collapsedWidth = '6.5rem'; // New collapsed width
+        const sidebarExpandedWidthValue = '180px'; // New expanded width
+        hamburgerBtn.addEventListener('click', () => { 
+            appSidebar.classList.toggle('expanded'); 
+            mainContentArea.style.marginLeft = appSidebar.classList.contains('expanded') ? sidebarExpandedWidthValue : collapsedWidth; 
+        }); 
+    }
+
+    // --- Add event listener for the new back button ---
+    function handleNavigateBackToNotebooks() {
+        if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
+        isFavoritesViewActive = false; 
+        currentFilterTag = null; 
+        currentlyViewedNotebookId = null; 
+        clearInteractionPanel(true); // Process edits before clearing
+        switchToMainView('notebooks');
+        if (notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none';
+        if (allNotesPageTitle) allNotesPageTitle.textContent = "All Notes";
+    }
+    if (fabNavigateBack) {
+        fabNavigateBack.addEventListener('click', handleNavigateBackToNotebooks);
+    }
+
+    // --- Modify sidebar navigation button event listeners to hide the back button ---
+    if(sidebarNotebooksPageBtn) {
+        sidebarNotebooksPageBtn.addEventListener('click', () => { 
+            if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
+            isFavoritesViewActive = false; 
+            currentFilterTag = null; 
+            currentlyViewedNotebookId = null; 
+            clearInteractionPanel(true); 
+            switchToMainView('notebooks');
+        }); 
+    }
+    if(sidebarAllNotesBtn) {
+        sidebarAllNotesBtn.addEventListener('click', () => { 
+            if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
+            isFavoritesViewActive = false; 
+            currentFilterTag = null; 
+            currentlyViewedNotebookId = null; 
+            clearInteractionPanel(true); 
+            switchToMainView('notes'); 
+            renderAllNotesPreviews(); 
+        });
+    }
+    if(sidebarFavoritesBtn) {
+        sidebarFavoritesBtn.addEventListener('click', () => { 
+            if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
+            isFavoritesViewActive = true; 
+            currentlyViewedNotebookId = null; 
+            currentFilterTag = null; 
+            clearInteractionPanel(true); 
+            switchToMainView('notes'); 
+            renderAllNotesPreviews(); 
+        });
+    }
+    if(sidebarTrashBtn) {
+        sidebarTrashBtn.addEventListener('click', () => { 
+            if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
+            isFavoritesViewActive = false; 
+            currentFilterTag = null; 
+            currentlyViewedNotebookId = null; 
+            clearInteractionPanel(true); 
+            switchToMainView('trash'); 
+        });
+    }
+    if(sidebarSettingsBtn) {
+        sidebarSettingsBtn.addEventListener('click', () => {
+            if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
+            switchToMainView('settings');
+        });
+    }
     
     function renderNotebooksOnPage() {
         if (!notebooksPageListContainer || !notebooksPageNoNotebooksMessage) return;
@@ -547,8 +621,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const notebookId = e.currentTarget.dataset.notebookId;
                 currentlyViewedNotebookId = notebookId;
                 isFavoritesViewActive = false; currentFilterTag = null;
-                clearInteractionPanel(true); switchToMainView('notes');
-                displayNotebookHeader(notebookId); renderAllNotesPreviews();
+                clearInteractionPanel(true);
+                // Show back button when entering notebook notes view
+                if (fabNavigateBack) fabNavigateBack.classList.remove('hidden');
+                switchToMainView('notes');
+                displayNotebookHeader(notebookId); 
+                renderAllNotesPreviews();
             });
 
             card.querySelector('.edit-notebook-icon-btn').addEventListener('click', (e) => {
