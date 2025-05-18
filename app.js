@@ -69,7 +69,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     
-    let currentEditSessionOpenTimePanel = null; // Timestamp for the "My edits" field session
+    let currentEditSessionOpenTimePanel = null; 
+    let currentEditSessionEntryId = null; // To track the ID of the current "My edits" entry
     let lastSelectedNotePreviewElement = null;
     let isAdminModeEnabled = false;
     let currentlyViewedNotebookId = null; 
@@ -85,7 +86,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
     const PALETTE_BASE_LIMIT = 15;
     let initialViewDetermined = false; 
-    // let hasUserStartedEditingCurrentNoteText = false; // No longer strictly needed for "My edits" visibility
 
     let lastSavedNoteTextInPanel = "";
     let lastSavedNoteTitleInPanel = "";
@@ -515,7 +515,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (appSidebar && mainContentArea) {
         appSidebar.style.width = fixedSidebarWidth;
         mainContentArea.style.marginLeft = fixedSidebarWidth;
-        if (hamburgerBtn) { // Hamburger button is no longer used for expansion
+        if (hamburgerBtn) { 
             hamburgerBtn.style.display = 'none'; 
         }
     }
@@ -1245,40 +1245,81 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function saveCurrentEditDescription() {
         if (!interactionPanelEditsMadeInputField || !currentInteractingNoteIdInPanel || isNewNoteSessionInPanel || !currentInteractingNoteOriginalNotebookId) {
-            return; // Not in a state to save an edit description
+            return; 
         }
-
+    
         const editsDescription = interactionPanelEditsMadeInputField.value.trim();
-        if (editsDescription === "") {
-            return; // Nothing to save
+    
+        if (editsDescription === "" && !currentEditSessionEntryId) {
+            return; // Nothing to save if field is empty and no session entry exists
         }
-
-        if (!currentEditSessionOpenTimePanel) { // If this is the first input for this "edit session"
-            currentEditSessionOpenTimePanel = new Date();
-        }
-
+    
         const noteRef = doc(db, "notebooks", currentInteractingNoteOriginalNotebookId, "notes", currentInteractingNoteIdInPanel);
-        const newEditEntry = { 
-            timestamp: Timestamp.fromDate(currentEditSessionOpenTimePanel), 
-            description: editsDescription 
-        };
-
+    
         try {
-            // We need to fetch the note to append to its existing edits array safely
-            const noteSnap = await getDoc(noteRef);
-            if (noteSnap.exists()) {
-                const noteData = noteSnap.data();
-                const updatedEdits = [...(noteData.edits || []), newEditEntry];
-                await updateDoc(noteRef, { 
-                    edits: updatedEdits,
-                    modifiedAt: serverTimestamp() 
-                });
-                console.log("Edit description saved for note:", currentInteractingNoteIdInPanel);
-                // Do NOT clear the input field here, user might be continuing to type.
-                // Do NOT reset currentEditSessionOpenTimePanel here, it's for the current description block.
-            }
+            await runTransaction(db, async (transaction) => {
+                const noteSnap = await transaction.get(noteRef);
+                if (!noteSnap.exists()) {
+                    throw "Note document does not exist!";
+                }
+    
+                let noteData = noteSnap.data();
+                let existingEdits = noteData.edits || [];
+                let entryModified = false;
+    
+                if (currentEditSessionEntryId) { // We have an ID for the current edit session
+                    let entryFound = false;
+                    existingEdits = existingEdits.map(edit => {
+                        if (edit.id === currentEditSessionEntryId) {
+                            entryFound = true;
+                            if (editsDescription === "") { // User cleared the description
+                                return null; // Mark for removal
+                            }
+                            // Update existing entry
+                            return { ...edit, description: editsDescription, timestamp: Timestamp.fromDate(currentEditSessionOpenTimePanel || new Date()) };
+                        }
+                        return edit;
+                    }).filter(edit => edit !== null); // Remove null entries (those marked for removal)
+    
+                    if (entryFound && editsDescription === "") { // Entry was found and cleared
+                        currentEditSessionEntryId = null; // Reset session ID
+                        currentEditSessionOpenTimePanel = null; // Reset timestamp for a potential new entry
+                        entryModified = true;
+                    } else if (entryFound && editsDescription !== "") { // Entry was found and updated
+                        entryModified = true;
+                    } else if (!entryFound && editsDescription !== "") { 
+                        // currentEditSessionEntryId was set, but no matching edit.id found (should be rare, implies data inconsistency or previous removal)
+                        // Treat as a new entry for this session
+                        if (!currentEditSessionOpenTimePanel) currentEditSessionOpenTimePanel = new Date();
+                        const newEditEntryId = doc(collection(db, '_placeholder')).id;
+                        existingEdits.push({ 
+                            id: newEditEntryId,
+                            timestamp: Timestamp.fromDate(currentEditSessionOpenTimePanel), 
+                            description: editsDescription 
+                        });
+                        currentEditSessionEntryId = newEditEntryId;
+                        entryModified = true;
+                    }
+                } else if (editsDescription !== "") { // No current session ID, but there's a description -> create new entry
+                    if (!currentEditSessionOpenTimePanel) currentEditSessionOpenTimePanel = new Date();
+                    const newEditEntryId = doc(collection(db, '_placeholder')).id;
+                    existingEdits.push({ 
+                        id: newEditEntryId,
+                        timestamp: Timestamp.fromDate(currentEditSessionOpenTimePanel), 
+                        description: editsDescription 
+                    });
+                    currentEditSessionEntryId = newEditEntryId;
+                    entryModified = true;
+                }
+    
+                if (entryModified) {
+                    transaction.update(noteRef, { edits: existingEdits, modifiedAt: serverTimestamp() });
+                }
+            });
+    
+            console.log("Edit description processed for note:", currentInteractingNoteIdInPanel);
         } catch (e) {
-            console.error("Error saving current edit description:", e);
+            console.error("Error in saveCurrentEditDescription transaction:", e);
         }
     }
     const debouncedSaveEditDescription = debounce(saveCurrentEditDescription, 2500);
@@ -1295,8 +1336,8 @@ document.addEventListener('DOMContentLoaded', () => {
         currentInteractingNoteIdInPanel = null; 
         currentOpenNotebookIdForPanel = notebookId; 
         currentInteractingNoteOriginalNotebookId = null; 
-        currentEditSessionOpenTimePanel = null; // Reset for new note
-        // hasUserStartedEditingCurrentNoteText = false; // Reset
+        currentEditSessionOpenTimePanel = new Date(); 
+        currentEditSessionEntryId = null; // Reset for new note
         currentNoteTagsArrayInPanel = []; 
 
 
@@ -1309,7 +1350,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isAdminModeEnabled) { 
                 panelCreationTimeContainer.style.display = 'block';
                 if(interactionPanelCreationTimeDisplayField) {
-                    interactionPanelCreationTimeDisplayField.textContent = formatFullDateFromTimestamp(new Date()); // Use current time for display
+                    interactionPanelCreationTimeDisplayField.textContent = formatFullDateFromTimestamp(new Date()); 
                     interactionPanelCreationTimeDisplayField.style.display = 'flex';
                 }
                 if(interactionPanelCreationTimeInputsContainer) interactionPanelCreationTimeInputsContainer.style.display = 'none';
@@ -1325,8 +1366,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if(interactionPanelActivityDisplayField) interactionPanelActivityDisplayField.style.display = 'none';
         
-        if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'none'; // Hide for new notes
-        if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; // Clear
+        if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'none'; 
+        if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
         
         renderTagPills(); 
         updateNoteInfoPanel({ createdAt: 'PENDING_SAVE', activity: '', tags: [], edits: [] }); 
@@ -1349,16 +1390,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const noteToEdit = localNotesCache.find(n => n.id === noteId); 
         if (!noteToEdit) { clearInteractionPanel(false); return; } 
         
-        // if (currentInteractingNoteIdInPanel !== noteId) { 
-        //     hasUserStartedEditingCurrentNoteText = false; // Reset this flag
-        // }
-        
         isNewNoteSessionInPanel = false; 
         currentInteractingNoteIdInPanel = noteId; 
         currentInteractingNoteOriginalNotebookId = noteToEdit.notebookId; 
         currentOpenNotebookIdForPanel = noteToEdit.notebookId; 
-        currentEditSessionOpenTimePanel = null; // Reset for the "My edits" field for this note load
-        if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; // Clear "My edits" field
+        currentEditSessionOpenTimePanel = new Date(); 
+        currentEditSessionEntryId = null; 
+        if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
 
         lastSavedNoteTitleInPanel = noteToEdit.title || "";
         lastSavedNoteTextInPanel = noteToEdit.text || "";
@@ -1415,7 +1453,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (interactionPanelCurrentEditSessionContainer) {
             if (noteToEdit.id && !isNewNoteSessionInPanel) { 
-                interactionPanelCurrentEditSessionContainer.style.display = 'block'; // Show for existing notes
+                interactionPanelCurrentEditSessionContainer.style.display = 'block';
             } else { 
                 interactionPanelCurrentEditSessionContainer.style.display = 'none';
             }
@@ -1514,10 +1552,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
     async function processInteractionPanelEditsOnDeselect(isSwitchingContext = false) { 
-        // Save the "My edits" field content before clearing the panel
         if (currentInteractingNoteIdInPanel && !isNewNoteSessionInPanel) {
-            await saveCurrentEditDescription(); // Ensure final edit description is saved
+            await saveCurrentEditDescription(); 
         }
+        
+        currentEditSessionEntryId = null;
+        currentEditSessionOpenTimePanel = null;
+        if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
         
         let noteBeingProcessedId = currentInteractingNoteIdInPanel || activelyCreatingNoteId; 
         if (isNewNoteSessionInPanel && !noteBeingProcessedId) { 
@@ -1546,9 +1587,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
         }
-        // Clear the "My edits" input field and its session timestamp AFTER saving
-        if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
-        currentEditSessionOpenTimePanel = null;
     }
     function clearInteractionPanel(processEdits = true) { 
         if (processEdits) processInteractionPanelEditsOnDeselect(true); 
@@ -1559,9 +1597,9 @@ document.addEventListener('DOMContentLoaded', () => {
         isNewNoteSessionInPanel = false; 
         activelyCreatingNoteId = null; 
         currentEditSessionOpenTimePanel = null; 
+        currentEditSessionEntryId = null; // Also clear this
         currentOpenNotebookIdForPanel = null; 
         currentInteractingNoteOriginalNotebookId = null; 
-        // hasUserStartedEditingCurrentNoteText = false; // Reset
         currentNoteTagsArrayInPanel = [];
         renderTagPills(); 
         if (lastSelectedNotePreviewElement) { 
@@ -1857,7 +1895,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (parentNotebookSnap.exists()) {
                     await updateDoc(parentNotebookRef, { notesCount: (parentNotebookSnap.data().notesCount || 0) + 1 });
                 }
-                 // After first save of a new note, the "My edits" section can be shown
                 if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'block';
 
             } catch (e) { console.error("Error creating new note:", e); alert("Failed to save new note."); }
@@ -1999,7 +2036,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if(isAdminModeEnabled) debouncedHandleInteractionPanelInputChange();
         });
     }
-    if(interactionPanelEditsMadeInputField) { // Add listener for "My edits" field
+    if(interactionPanelEditsMadeInputField) { 
         interactionPanelEditsMadeInputField.addEventListener('input', debouncedSaveEditDescription);
     }
     
