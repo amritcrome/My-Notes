@@ -1,4 +1,5 @@
-// pablo 2 START OF JAVASCRIPT CODE (app.js)
+
+// START OF JAVASCRIPT CODE (app.js)
 // Import Firebase SDKs
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
 import { 
@@ -230,7 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingsNoTagsMessage = document.getElementById('settingsNoTagsMessage');
     const adminModeToggle = document.getElementById('adminModeToggle');
     const fabCreateNote = document.getElementById('fabCreateNote');
-    const fabNavigateBack = document.getElementById('fabNavigateBack'); // New Back FAB
+    const fabNavigateBack = document.getElementById('fabNavigateBack'); 
 
     // Trash View Elements
     const deletedNotesListContainer = document.getElementById('deletedNotesListContainer');
@@ -295,8 +296,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if(notebooksContentDiv) notebooksContentDiv.classList.add("main-view-content-active"); 
         }
 
-        // Hide back button for main navigation views
-        if (viewName === 'notebooks' || viewName === 'settings' || viewName === 'trash' || viewName === 'favorites' || (viewName === 'notes' && !currentlyViewedNotebookId && !currentFilterTag && !isFavoritesViewActive)) {
+        // Hide back button for main navigation views or when in "All Notes" (no specific notebook)
+        if (viewName === 'notebooks' || viewName === 'settings' || viewName === 'trash' || 
+            (viewName === 'notes' && !currentlyViewedNotebookId && !currentFilterTag && !isFavoritesViewActive) || 
+            (viewName === 'favorites' && !currentlyViewedNotebookId && !currentFilterTag) ) { // Added favorites here
             if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
         }
 
@@ -510,14 +513,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     initializeDataListeners();
 
-    if (appSidebar && hamburgerBtn && mainContentArea) { 
-        const collapsedWidth = '6.5rem'; 
-        const sidebarExpandedWidthValue = '180px'; 
-        hamburgerBtn.addEventListener('click', () => { 
-            appSidebar.classList.toggle('expanded'); 
-            mainContentArea.style.marginLeft = appSidebar.classList.contains('expanded') ? sidebarExpandedWidthValue : collapsedWidth; 
-        }); 
+    // Sidebar and Main Content Area Sizing (No expansion, fixed width)
+    const fixedSidebarWidth = '7rem'; // New fixed width
+    if (appSidebar && mainContentArea) {
+        appSidebar.style.width = fixedSidebarWidth;
+        mainContentArea.style.marginLeft = fixedSidebarWidth;
+        // Remove hamburger button functionality if it's not needed
+        if (hamburgerBtn) {
+            hamburgerBtn.style.display = 'none'; // Or remove it from HTML if truly not needed
+        }
     }
+    
     if(sidebarNotebooksPageBtn) {
         sidebarNotebooksPageBtn.addEventListener('click', () => { 
             if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
@@ -616,7 +622,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const notebookId = e.currentTarget.dataset.notebookId;
                 currentlyViewedNotebookId = notebookId;
                 isFavoritesViewActive = false; currentFilterTag = null;
-                if (fabNavigateBack) fabNavigateBack.classList.remove('hidden'); // Show back button
+                if (fabNavigateBack) fabNavigateBack.classList.remove('hidden'); 
                 clearInteractionPanel(true); switchToMainView('notes');
                 displayNotebookHeader(notebookId); renderAllNotesPreviews();
             });
@@ -2473,4 +2479,3 @@ document.addEventListener('DOMContentLoaded', () => {
     clearInteractionPanel(false); 
     
 });
-// END OF JAVASCRIPT CODE (app.js)
