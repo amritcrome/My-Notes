@@ -1,4 +1,4 @@
-// pablo START OF JAVASCRIPT CODE (app.js)
+// pablo 2 START OF JAVASCRIPT CODE (app.js)
 // Import Firebase SDKs
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
 import { 
@@ -76,8 +76,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentFilterTag = null; 
     let tagToDeleteGlobally = { id: null, name: null }; 
     let notebookToDeleteGlobally = { id: null, name: null }; 
-    let noteActionContext = { type: null, id: null, notebookId: null, title: null, isDeletedNote: false }; // For generic confirm modal
-    let noteToRestoreWithOptions = null; // For the restore options modal
+    let noteActionContext = { type: null, id: null, notebookId: null, title: null, isDeletedNote: false }; 
+    let noteToRestoreWithOptions = null; 
 
 
     let isFavoritesViewActive = false; 
@@ -87,12 +87,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let initialViewDetermined = false; 
     let hasUserStartedEditingCurrentNoteText = false;
 
-    // Variables to store the last known saved state of the note fields
     let lastSavedNoteTextInPanel = "";
     let lastSavedNoteTitleInPanel = "";
-    let lastSavedNoteTagsInPanel = ""; // This will store a string representation (e.g., sorted, comma-joined)
+    let lastSavedNoteTagsInPanel = ""; 
     let lastSavedNoteActivityInPanel = "";
-    let currentNoteTagsArrayInPanel = []; // Array of tag name strings for the current note in editor
+    let currentNoteTagsArrayInPanel = []; 
 
 
     // Unsubscribe functions
@@ -231,7 +230,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingsNoTagsMessage = document.getElementById('settingsNoTagsMessage');
     const adminModeToggle = document.getElementById('adminModeToggle');
     const fabCreateNote = document.getElementById('fabCreateNote');
-    const fabNavigateBack = document.getElementById('fabNavigateBack');
+    const fabNavigateBack = document.getElementById('fabNavigateBack'); // New Back FAB
 
     // Trash View Elements
     const deletedNotesListContainer = document.getElementById('deletedNotesListContainer');
@@ -296,10 +295,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if(notebooksContentDiv) notebooksContentDiv.classList.add("main-view-content-active"); 
         }
 
-        // Hide back button for these views
-        if (viewName === 'notebooks' || viewName === 'settings' || viewName === 'trash') {
+        // Hide back button for main navigation views
+        if (viewName === 'notebooks' || viewName === 'settings' || viewName === 'trash' || viewName === 'favorites' || (viewName === 'notes' && !currentlyViewedNotebookId && !currentFilterTag && !isFavoritesViewActive)) {
             if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
         }
+
 
         if (viewName === 'settings' && !document.querySelector('.settings-menu-item-active')) {
             switchToSettingsSection("admin"); 
@@ -323,7 +323,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!timestamp) return null;
         if (timestamp instanceof Timestamp) return timestamp.toDate().toISOString();
         if (timestamp instanceof Date) return timestamp.toISOString();
-        const date = new Date(timestamp); // Try to parse if it's a string or number
+        const date = new Date(timestamp); 
         return isNaN(date.getTime()) ? null : date.toISOString();
     }
 
@@ -405,7 +405,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 updatePanelNotebookSelector(); 
                 if (currentlyViewedNotebookId) displayNotebookHeader(currentlyViewedNotebookId);
                 updatePaletteLimitMessage(); 
-                populateExportNotebookSelector(); // Update export dropdown
+                populateExportNotebookSelector(); 
                 
                 if (localNotebooksCache.length === 0 && !querySnapshot.metadata.hasPendingWrites) { 
                     initializeDefaultNotebookFirestore();
@@ -438,7 +438,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (activelyCreatingNoteId && currentInteractingNoteIdInPanel === activelyCreatingNoteId) {
                     const updatedNote = localNotesCache.find(n => n.id === activelyCreatingNoteId);
                     if (updatedNote) {
-                        // Update last saved states if this is the actively created note being updated by snapshot
                         lastSavedNoteTitleInPanel = updatedNote.title;
                         lastSavedNoteTextInPanel = updatedNote.text;
                         lastSavedNoteTagsInPanel = (updatedNote.tags || []).map(t => t.name).sort().join(',');
@@ -484,10 +483,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 localTagsCache = Array.from(tagMap.values()); 
                 renderTagsInSettings(); 
                 renderAllNotesPreviews(); 
-                if (currentInteractingNoteIdInPanel) renderTagPills(); // Re-render pills if a note is active
+                if (currentInteractingNoteIdInPanel) renderTagPills(); 
             }, (error) => { console.error("Error fetching tags: ", error); alert("Error loading tags."); hideLoadingOverlay(); });
 
-            // Listener for deleted_notes
             const deletedNotesQuery = query(collection(db, "deleted_notes"), orderBy("deletedAt", "desc"));
             unsubscribeDeletedNotes = onSnapshot(deletedNotesQuery, (querySnapshot) => {
                 const fetchedDeletedNotes = [];
@@ -512,32 +510,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     initializeDataListeners();
 
-    // --- Update Sidebar Width Variables in hamburgerBtn listener ---
     if (appSidebar && hamburgerBtn && mainContentArea) { 
-        const collapsedWidth = '6.5rem'; // New collapsed width
-        const sidebarExpandedWidthValue = '180px'; // New expanded width
+        const collapsedWidth = '6.5rem'; 
+        const sidebarExpandedWidthValue = '180px'; 
         hamburgerBtn.addEventListener('click', () => { 
             appSidebar.classList.toggle('expanded'); 
             mainContentArea.style.marginLeft = appSidebar.classList.contains('expanded') ? sidebarExpandedWidthValue : collapsedWidth; 
         }); 
     }
-
-    // --- Add event listener for the new back button ---
-    function handleNavigateBackToNotebooks() {
-        if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
-        isFavoritesViewActive = false; 
-        currentFilterTag = null; 
-        currentlyViewedNotebookId = null; 
-        clearInteractionPanel(true); // Process edits before clearing
-        switchToMainView('notebooks');
-        if (notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none';
-        if (allNotesPageTitle) allNotesPageTitle.textContent = "All Notes";
-    }
-    if (fabNavigateBack) {
-        fabNavigateBack.addEventListener('click', handleNavigateBackToNotebooks);
-    }
-
-    // --- Modify sidebar navigation button event listeners to hide the back button ---
     if(sidebarNotebooksPageBtn) {
         sidebarNotebooksPageBtn.addEventListener('click', () => { 
             if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
@@ -548,7 +528,7 @@ document.addEventListener('DOMContentLoaded', () => {
             switchToMainView('notebooks');
         }); 
     }
-    if(sidebarAllNotesBtn) {
+    if(sidebarAllNotesBtn) { 
         sidebarAllNotesBtn.addEventListener('click', () => { 
             if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
             isFavoritesViewActive = false; 
@@ -557,9 +537,9 @@ document.addEventListener('DOMContentLoaded', () => {
             clearInteractionPanel(true); 
             switchToMainView('notes'); 
             renderAllNotesPreviews(); 
-        });
+        }); 
     }
-    if(sidebarFavoritesBtn) {
+    if(sidebarFavoritesBtn) { 
         sidebarFavoritesBtn.addEventListener('click', () => { 
             if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
             isFavoritesViewActive = true; 
@@ -568,9 +548,9 @@ document.addEventListener('DOMContentLoaded', () => {
             clearInteractionPanel(true); 
             switchToMainView('notes'); 
             renderAllNotesPreviews(); 
-        });
+        }); 
     }
-    if(sidebarTrashBtn) {
+    if(sidebarTrashBtn) { 
         sidebarTrashBtn.addEventListener('click', () => { 
             if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
             isFavoritesViewActive = false; 
@@ -578,7 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentlyViewedNotebookId = null; 
             clearInteractionPanel(true); 
             switchToMainView('trash'); 
-        });
+        }); 
     }
     if(sidebarSettingsBtn) {
         sidebarSettingsBtn.addEventListener('click', () => {
@@ -587,9 +567,24 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    function handleNavigateBackToNotebooks() {
+        if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
+        isFavoritesViewActive = false; 
+        currentFilterTag = null; 
+        currentlyViewedNotebookId = null; 
+        clearInteractionPanel(true); 
+        switchToMainView('notebooks');
+        if (notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none';
+        if (allNotesPageTitle) allNotesPageTitle.textContent = "All Notes"; 
+    }
+
+    if (fabNavigateBack) {
+        fabNavigateBack.addEventListener('click', handleNavigateBackToNotebooks);
+    }
+    
     function renderNotebooksOnPage() {
         if (!notebooksPageListContainer || !notebooksPageNoNotebooksMessage) return;
-        notebooksPageListContainer.innerHTML = ""; // Clear existing cards
+        notebooksPageListContainer.innerHTML = ""; 
 
         const sortedNotebooks = [...localNotebooksCache].sort((a,b) => a.title.localeCompare(b.title));
 
@@ -621,12 +616,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const notebookId = e.currentTarget.dataset.notebookId;
                 currentlyViewedNotebookId = notebookId;
                 isFavoritesViewActive = false; currentFilterTag = null;
-                clearInteractionPanel(true);
-                // Show back button when entering notebook notes view
-                if (fabNavigateBack) fabNavigateBack.classList.remove('hidden');
-                switchToMainView('notes');
-                displayNotebookHeader(notebookId); 
-                renderAllNotesPreviews();
+                if (fabNavigateBack) fabNavigateBack.classList.remove('hidden'); // Show back button
+                clearInteractionPanel(true); switchToMainView('notes');
+                displayNotebookHeader(notebookId); renderAllNotesPreviews();
             });
 
             card.querySelector('.edit-notebook-icon-btn').addEventListener('click', (e) => {
@@ -673,7 +665,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const editPaletteBtnEl = editPaletteBtn;
         if(editPaletteBtnEl) editPaletteBtnEl.style.color = getTextColorForBackground(themeSettings.themeButtonPrimary);
-        
+
         const exportNotebookBtnEl = exportNotebookBtn;
         if(exportNotebookBtnEl) exportNotebookBtnEl.style.color = getTextColorForBackground(themeSettings.themeButtonPrimary);
 
@@ -1060,13 +1052,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function handleDeleteNotebook(notebookId) { if (!notebookId) { alert("Cannot delete notebook: ID missing."); return; } const notebookToDelete = localNotebooksCache.find(nb => nb.id === notebookId); if (!notebookToDelete) { alert(`Error: Notebook to delete (ID: ${notebookId}) not found.`); return; } openConfirmDeleteNotebookModal(notebookId, notebookToDelete.title); }
 
-    // --- Note Action Confirmation Modal (Only for Permanent Delete now) ---
     function openConfirmNoteActionModal(type, noteId, notebookId, noteTitle, isDeletedNote = false) {
         noteActionContext = { type, id: noteId, notebookId, title: noteTitle || "(Untitled Note)", isDeletedNote };
         
         if (!confirmNoteActionModal || !confirmNoteActionTitle || !confirmNoteActionMessage || !confirmNoteActionWarning || !executeNoteActionBtn) return;
 
-        if (type === 'deletePermanently') { // Only show modal for permanent delete
+        if (type === 'deletePermanently') { 
             confirmNoteActionTitle.textContent = "Delete Note Permanently?";
             confirmNoteActionMessage.textContent = `Are you sure you want to permanently delete the note "${noteActionContext.title}"?`;
             confirmNoteActionWarning.textContent = "This action cannot be undone.";
@@ -1083,11 +1074,11 @@ document.addEventListener('DOMContentLoaded', () => {
         noteActionContext = { type: null, id: null, notebookId: null, title: null, isDeletedNote: false };
     }
 
-    async function performActualNoteAction() { // This now only handles permanent delete
+    async function performActualNoteAction() { 
         if (!noteActionContext.id || noteActionContext.type !== 'deletePermanently') return;
         showLoadingOverlay("Deleting Permanently...");
         
-        if (noteActionContext.isDeletedNote) { // Deleting from trash
+        if (noteActionContext.isDeletedNote) { 
             try {
                 await deleteDoc(doc(db, "deleted_notes", noteActionContext.id));
             } catch (e) { console.error("Error deleting note permanently from trash:", e); alert("Failed to delete note permanently."); }
@@ -1096,7 +1087,6 @@ document.addEventListener('DOMContentLoaded', () => {
         closeConfirmNoteActionModal();
     }
 
-    // Function to immediately move a note to trash without confirmation
     async function moveNoteToTrashImmediately(noteId, notebookId, noteTitle) {
         if (!noteId || !notebookId) {
             console.error("Note ID or Notebook ID missing for move to trash.");
@@ -1554,7 +1544,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderTagPills(); 
         if (lastSelectedNotePreviewElement) { 
             lastSelectedNotePreviewElement.classList.remove('selected'); 
-             // Restore its original style explicitly
             const deselectedNoteId = lastSelectedNotePreviewElement.dataset.noteId;
             const deselectedNoteData = localNotesCache.find(n => n.id === deselectedNoteId);
             if (deselectedNoteData) {
@@ -2056,7 +2045,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     function updatePanelNotebookSelector(selectedNotebookId = null) { if(panelNotebookSelector) { const currentSelection = panelNotebookSelector.value; panelNotebookSelector.innerHTML = ''; if (localNotebooksCache.length === 0) { const option = document.createElement('option'); option.value = ""; option.textContent = "No notebooks"; option.disabled = true; panelNotebookSelector.appendChild(option); } else { localNotebooksCache.forEach(nb => { const option = document.createElement('option'); option.value = nb.id; option.textContent = nb.title; panelNotebookSelector.appendChild(option); }); } if (selectedNotebookId) panelNotebookSelector.value = selectedNotebookId; else if (currentSelection && localNotebooksCache.some(nb => nb.id === currentSelection)) panelNotebookSelector.value = currentSelection; else if (localNotebooksCache.length > 0) panelNotebookSelector.value = localNotebooksCache[0].id; } }
 
-    // --- Tag Pill Logic ---
     function renderTagPills() {
         if (!noteTagsContainer_panel || !noteTagsInputField_panel) return;
         const pills = noteTagsContainer_panel.querySelectorAll('.tag-pill');
@@ -2141,9 +2129,7 @@ document.addEventListener('DOMContentLoaded', () => {
             noteTagsInputField_panel.value = ''; 
         });
     }
-    // --- End Tag Pill Logic ---
 
-    // --- Trash Functionality ---
     function renderDeletedNotesList() {
         if (!deletedNotesListContainer || !noDeletedNotesMessage || !emptyTrashBtn) return;
         deletedNotesListContainer.innerHTML = '';
@@ -2384,9 +2370,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    // --- End Trash Functionality ---
 
-    // --- Export Functionality ---
     function populateExportNotebookSelector() {
         if (!exportNotebookSelector) return;
         exportNotebookSelector.innerHTML = ''; 
@@ -2484,7 +2468,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    // --- End Export Functionality ---
     
     renderTagsInSettings(); 
     clearInteractionPanel(false); 
