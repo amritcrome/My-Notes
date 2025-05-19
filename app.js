@@ -3,8 +3,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
 import { 
     getFirestore, collection, collectionGroup, addDoc, getDoc, getDocs, doc, updateDoc, deleteDoc, 
-    query, where, onSnapshot, orderBy, serverTimestamp, Timestamp, writeBatch, runTransaction, limit, startAfter 
-} from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js"; 
+    query, where, onSnapshot, orderBy, serverTimestamp, Timestamp, writeBatch, runTransaction, limit, startAfter, setDoc // Added setDoc here
+} from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
 
 // ==========================================================================================
 // Your web app's Firebase configuration
