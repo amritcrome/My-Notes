@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
         themeBorderAccent: initialDefaultThemeColors[2],
         appDefaultBackgroundColor: initialDefaultThemeColors[3],
         defaultHomepage: "notebooks",
-        viewMode: "compact" 
+        viewMode: "compact" // Default view mode
     };
     
     const initialPaletteColors = ["#a7f3d0", "#6ee7b7", "#34d399", "#10b981", "#059669", "#fde047", "#facc15", "#eab308", "#f3f4f6"]; 
@@ -287,7 +287,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (notesContentDiv.classList.contains('main-view-content-active')) {
             if (themeSettings.viewMode === 'comfortable') {
                 // `showing-grid` or `showing-editor` will be set by `switchToMainView` or click handlers
-                // This function mainly sets the body class for broader CSS targeting.
             } else { 
                 notesContentDiv.classList.remove('showing-grid', 'showing-editor');
                 if(notesPreviewColumnOuter) notesPreviewColumnOuter.style.display = 'flex';
@@ -327,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if(notesPreviewColumnOuter) notesPreviewColumnOuter.style.display = 'none'; 
                     if(fabCreateNote) fabCreateNote.classList.add('hidden');
                     if(fabNavigateBack) fabNavigateBack.classList.remove('hidden');
-                } else { // Show grid (either all notes or a specific notebook's notes)
+                } else { 
                     notesContentDiv.classList.add('showing-grid');
                     notesContentDiv.classList.remove('showing-editor');
                     if(noteInteractionPanel) noteInteractionPanel.style.display = 'none'; 
@@ -340,7 +339,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
                     }
                 }
-            } else { // Compact mode
+            } else { 
                 notesContentDiv.classList.remove('showing-grid', 'showing-editor');
                 if(notesPreviewColumnOuter) notesPreviewColumnOuter.style.display = 'flex'; 
                 if(noteInteractionPanel) noteInteractionPanel.style.display = 'flex'; 
@@ -503,7 +502,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const currentEditDescValue = interactionPanelEditsMadeInputField ? interactionPanelEditsMadeInputField.value : null;
                         const editSessionActive = currentEditSessionOpenTimePanel && currentEditSessionEntryId;
                         
-                        // Update main note fields if not focused
+                        // Update main note fields if not focused by the user
                         if(noteTitleInputField_panel && document.activeElement !== noteTitleInputField_panel) {
                             if (noteTitleInputField_panel.value !== updatedNote.title) noteTitleInputField_panel.value = updatedNote.title;
                         }
@@ -526,11 +525,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         // If "My edits" was active and the note being updated is the current one, restore its content
                         // This prevents the "My edits" field from clearing on a general note autosave.
-                        if (editSessionActive && interactionPanelEditsMadeInputField && currentEditDescValue !== null) {
-                            interactionPanelEditsMadeInputField.value = currentEditDescValue;
+                        if (editSessionActive && interactionPanelEditsMadeInputField && currentEditDescValue !== null && 
+                            interactionPanelCurrentEditSessionContainer && interactionPanelCurrentEditSessionContainer.style.display === 'block') {
+                            // Only restore if the "My Edits" section is actually visible for this note.
+                            // This check is important because displayNoteInInteractionPanel might hide it based on its own logic
+                            // if the note context changed (e.g. a different note was loaded then quickly reloaded).
+                            if (currentInteractingNoteIdInPanel === updatedNote.id) {
+                                interactionPanelEditsMadeInputField.value = currentEditDescValue;
+                            }
                         }
 
                     } else if (isCurrentNoteModifiedBySnapshot) { 
+                        // Note was likely deleted from another client or context
                         clearInteractionPanel();
                     }
                 }
@@ -652,10 +658,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if(notesPreviewColumnOuter) notesPreviewColumnOuter.style.display = 'flex';
             if(fabCreateNote) fabCreateNote.classList.remove('hidden');
             
-            if (!currentlyViewedNotebookId && !currentFilterTag && !isFavoritesViewActive) { 
-                 if(fabNavigateBack) fabNavigateBack.classList.add('hidden');
-            } else { 
-                 if(fabNavigateBack) fabNavigateBack.classList.remove('hidden');
+            // Determine if back button should still be shown (e.g., if viewing a specific notebook's grid)
+            if (currentlyViewedNotebookId || currentFilterTag || isFavoritesViewActive) {
+                 if(fabNavigateBack) fabNavigateBack.classList.remove('hidden'); // Keep it if still in a filtered/notebook context
+            } else {
+                 if(fabNavigateBack) fabNavigateBack.classList.add('hidden'); // Hide if back to main "All Notes" grid
             }
             clearInteractionPanel(true); 
             renderAllNotesPreviews();
@@ -718,7 +725,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     notesContentDiv.classList.remove('showing-editor');
                     if(noteInteractionPanel) noteInteractionPanel.style.display = 'none'; 
                     if(notesPreviewColumnOuter) notesPreviewColumnOuter.style.display = 'flex'; 
-                    if(fabCreateNote) fabCreateNote.classList.remove('hidden');
+                    if(fabCreateNote) fabCreateNote.classList.remove('hidden'); 
                 }
                 if (fabNavigateBack) fabNavigateBack.classList.remove('hidden'); 
 
@@ -1385,9 +1392,9 @@ document.addEventListener('DOMContentLoaded', () => {
     async function saveCurrentEditDescription() {
         if (!interactionPanelEditsMadeInputField || 
             !currentInteractingNoteIdInPanel || 
-            isNewNoteSessionInPanel || // Don't save for a note that's still in the "new" phase
+            isNewNoteSessionInPanel || 
             !currentInteractingNoteOriginalNotebookId ||
-            !currentEditSessionOpenTimePanel) { // Only save if an "My edits" session was properly initiated
+            !currentEditSessionOpenTimePanel) { // Crucial: Only save if a "My edits" session was initiated
             return; 
         }
     
@@ -1409,7 +1416,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (currentEditSessionEntryId) { 
                         existingEdits = existingEdits.filter(edit => edit.id !== currentEditSessionEntryId);
                         currentEditSessionEntryId = null; 
-                        // currentEditSessionOpenTimePanel remains, as the section might still be open
+                        // currentEditSessionOpenTimePanel is kept to signify the section was "opened"
                         entryModified = true;
                     }
                 } else { 
@@ -1514,7 +1521,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function displayNoteInInteractionPanel(noteId, forceFocusToTitle = true) { 
         const previousInteractingNoteId = currentInteractingNoteIdInPanel;
-        if ((currentInteractingNoteIdInPanel && currentInteractingNoteIdInPanel !== noteId) || isNewNoteSessionInPanel ) {
+        const isSameNote = previousInteractingNoteId === noteId;
+
+        if (!isSameNote && ((currentInteractingNoteIdInPanel && currentInteractingNoteIdInPanel !== noteId) || isNewNoteSessionInPanel) ) {
             processInteractionPanelEditsOnDeselect(true); 
         }
         
@@ -1526,7 +1535,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentInteractingNoteOriginalNotebookId = noteToEdit.notebookId; 
         currentOpenNotebookIdForPanel = noteToEdit.notebookId; 
         
-        if (previousInteractingNoteId !== noteId || !currentEditSessionOpenTimePanel) { // Reset if different note OR no active edit session for current note
+        if (!isSameNote) { // Only reset edit session state if it's a truly different note
             currentEditSessionOpenTimePanel = null; 
             currentEditSessionEntryId = null; 
             if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
@@ -1542,36 +1551,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if(noteTitleInputField_panel) {
             const newTitle = noteToEdit.title || "";
-            if (document.activeElement !== noteTitleInputField_panel) { 
+            if (document.activeElement !== noteTitleInputField_panel || !isSameNote) { 
                 if (noteTitleInputField_panel.value !== newTitle) noteTitleInputField_panel.value = newTitle;
             }
         }
         if(noteTextInputField_panel) {
             const newText = noteToEdit.text || "";
-             if (document.activeElement !== noteTextInputField_panel) { 
+             if (document.activeElement !== noteTextInputField_panel || !isSameNote) { 
                 if (noteTextInputField_panel.value !== newText) noteTextInputField_panel.value = newText;
             }
             
-            const handleFirstMainEdit = () => {
-                if (currentInteractingNoteIdInPanel === noteId && !isNewNoteSessionInPanel && !currentEditSessionOpenTimePanel) { 
-                    if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'block';
-                    currentEditSessionOpenTimePanel = new Date(); 
-                    currentEditSessionEntryId = null; 
-                    if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
+            // Logic to show "My edits" section
+            if (!isNewNoteSessionInPanel && currentInteractingNoteIdInPanel) { // Only for existing, loaded notes
+                const oldListener = noteTextInputField_panel._handleFirstMainEditListener;
+                if (oldListener) {
+                    noteTextInputField_panel.removeEventListener('input', oldListener);
                 }
-            };
-            
-            const oldListener = noteTextInputField_panel._handleFirstMainEditListener;
-            if (oldListener) {
-                noteTextInputField_panel.removeEventListener('input', oldListener);
-            }
-            // Add listener only if "My edits" section is not already visible for an active session
-            if (interactionPanelCurrentEditSessionContainer && interactionPanelCurrentEditSessionContainer.style.display === 'none') {
-                noteTextInputField_panel.addEventListener('input', handleFirstMainEdit, { once: true });
-                noteTextInputField_panel._handleFirstMainEditListener = handleFirstMainEdit;
-            } else if (interactionPanelCurrentEditSessionContainer && currentEditSessionOpenTimePanel && !isNewNoteSessionInPanel) {
-                // If a session is already active (e.g. due to snapshot refresh), ensure "My Edits" is visible
-                 interactionPanelCurrentEditSessionContainer.style.display = 'block';
+
+                const handleFirstMainEdit = () => {
+                    if (currentInteractingNoteIdInPanel === noteId && !currentEditSessionOpenTimePanel) { 
+                        if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'block';
+                        currentEditSessionOpenTimePanel = new Date(); 
+                        currentEditSessionEntryId = null; 
+                        if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
+                    }
+                };
+                // Add listener if no edit session is active for this note yet
+                if (!currentEditSessionOpenTimePanel) {
+                    noteTextInputField_panel.addEventListener('input', handleFirstMainEdit, { once: true });
+                    noteTextInputField_panel._handleFirstMainEditListener = handleFirstMainEdit;
+                } else if (interactionPanelCurrentEditSessionContainer) {
+                    // If a session was already active (e.g. from a previous interaction before a snapshot refresh), ensure it's visible
+                    interactionPanelCurrentEditSessionContainer.style.display = 'block';
+                }
+            } else if (interactionPanelCurrentEditSessionContainer) {
+                 interactionPanelCurrentEditSessionContainer.style.display = 'none'; // Hide for new notes
             }
         }
         renderTagPills(); 
@@ -1695,14 +1709,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (favStarDivSelected && favoriteIconSelected) {
                 favStarDivSelected.classList.toggle('is-favorite', noteToEdit.isFavorite || false);
                 favoriteIconSelected.className = noteToEdit.isFavorite ? 'fas fa-star' : 'far fa-star';
-                if (previewEl.classList.contains('selected')) { 
+                if (currentPreviewEl.classList.contains('selected')) { 
                      favoriteIconSelected.style.color = noteToEdit.isFavorite ? '#FBBF24' : '#FFFFFF';
                 } else {
                      favoriteIconSelected.style.color = noteToEdit.isFavorite ? '#FBBF24' : '#a0aec0';
                 }
             }
             if (deleteIconSelected) {
-                deleteIconSelected.style.color = previewEl.classList.contains('selected') ? '#f87171' : '#ef4444'; 
+                deleteIconSelected.style.color = currentPreviewEl.classList.contains('selected') ? '#f87171' : '#ef4444'; 
             }
 
             lastSelectedNotePreviewElement = currentPreviewEl;
@@ -1855,7 +1869,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } 
             previewEl.style.backgroundColor = ''; 
             const h4El = document.createElement('h4'); 
-            h4El.className = "font-semibold text-md truncate"; 
+            h4El.className = "font-semibold text-md"; // Removed truncate to allow wrapping
             const pContentEl = document.createElement('p'); 
             pContentEl.className = "text-xs mt-1 note-content-preview"; 
             const pNotebookEl = document.createElement('p'); 
@@ -1892,7 +1906,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let previewHTML = '<em>No content</em>'; 
             if (note.text && note.text.trim() !== "") { 
                 const lines = note.text.split('\n'); 
-                const maxLines = 3; 
+                const maxLines = previewEl.classList.contains('grid-card-style') ? 5 : 3; // More lines for grid
                 const linesToDisplay = lines.slice(0, maxLines); 
                 previewHTML = linesToDisplay.map(line => line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")).join('<br>'); 
                 if (lines.length > maxLines) previewHTML += '...'; 
@@ -2068,21 +2082,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (parentNotebookSnap.exists()) {
                     await updateDoc(parentNotebookRef, { notesCount: (parentNotebookSnap.data().notesCount || 0) + 1 });
                 }
-                // "My edits" section will be shown on next interaction with main text via displayNoteInInteractionPanel's listener
-                if(noteTextInputField_panel && interactionPanelCurrentEditSessionContainer) {
-                     const handleFirstMainEditAfterSave = () => {
-                        if (currentInteractingNoteIdInPanel === docRef.id) { 
-                           if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'block';
-                           currentEditSessionOpenTimePanel = new Date(); 
-                           currentEditSessionEntryId = null; 
-                           if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = '';
-                        }
-                    };
-                    noteTextInputField_panel.removeEventListener('input', handleFirstMainEditAfterSave); 
-                    noteTextInputField_panel.addEventListener('input', handleFirstMainEditAfterSave, { once: true });
-                    noteTextInputField_panel._handleFirstMainEditListener = handleFirstMainEditAfterSave;
-                }
-
+                // "My edits" section logic is handled in displayNoteInInteractionPanel
+                // after the note is first saved and reloaded.
 
             } catch (e) { console.error("Error creating new note:", e); alert("Failed to save new note."); }
         } else if (currentInteractingNoteIdInPanel && existingNoteData) { 
