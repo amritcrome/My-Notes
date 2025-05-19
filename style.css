@@ -97,21 +97,28 @@ body {
     color: var(--theme-text-on-light); 
     position: relative; 
     min-height: 120px; 
+    display: flex; /* Added for better internal alignment if needed */
+    flex-direction: column; /* Added */
+    justify-content: space-between; /* Added */
 }
 .note-preview-card h4 {
     color: var(--theme-text-on-light); 
     font-weight: 600;
+    margin-bottom: 0.25rem; /* Add some space below title */
 }
 .note-preview-card .note-content-preview {
     color: var(--theme-text-on-light); 
     margin-bottom: 1.5rem; 
+    flex-grow: 1; /* Allow preview to take up space */
 }
 .note-preview-card .note-preview-notebook-name {
     color: #6b7280; 
-    position: absolute; 
-    bottom: 0.5rem;
-    left: 0.75rem;
+    /* position: absolute;  Removed for normal flow */
+    /* bottom: 0.5rem; Removed */
+    /* left: 0.75rem; Removed */
     font-size: 0.75rem;
+    margin-top: auto; /* Push to bottom if card is taller */
+    padding-top: 0.5rem; /* Space above notebook name */
 }
 
 .deleted-note-card {
@@ -174,7 +181,7 @@ body {
 .note-preview-card:hover, .deleted-note-card:hover {
     box-shadow: 0 2px 8px rgba(0,0,0,0.07);
 }
-.note-preview-card.selected {
+.note-preview-card.selected { /* Style for compact view selected note */
     background-color: #000000 !important; 
     border-left-width: 4px;
     border-left-color: var(--theme-border-accent); 
@@ -193,12 +200,22 @@ body {
     overflow: hidden; 
 }
 .note-actions-container { 
-    position: absolute;
+    /* position: absolute; Modified: only absolute for non-grid */
     bottom: 0.5rem;
     right: 0.5rem;
     display: flex;
     gap: 0.25rem; 
 }
+.note-preview-card:not(.grid-card-style) .note-actions-container {
+    position: absolute; /* Keep absolute for list view */
+}
+.note-preview-card.grid-card-style .note-actions-container {
+    position: relative; /* Static for grid view, align to bottom of card content */
+    margin-top: 0.5rem;
+    justify-content: flex-end;
+}
+
+
 .favorite-star, .delete-note-icon, .restore-note-icon, .permanent-delete-note-icon {
     padding: 0.25rem;
     border-radius: 50%;
@@ -243,6 +260,7 @@ body {
     display: flex;
     flex-grow: 1; 
     min-height: 0; 
+    position: relative; /* For absolute positioning of full-page editor */
 }
 @media (min-width: 768px) { 
     .all-notes-container {
@@ -263,7 +281,7 @@ body {
     }
 }
 
-
+/* Compact View (Default) */
 #notesPreviewColumnOuter {
     flex-basis: 33.333333%; 
     padding-right: 0.5rem; 
@@ -277,18 +295,6 @@ body {
     overflow-y: auto;
     min-height: 0;
 }
-
- @media (max-width: 767px) { 
-    #notesPreviewColumnOuter {
-        flex-basis: auto; 
-        margin-bottom: 0.75rem; 
-        border-right: none;
-        border-bottom: 1px solid #e5e7eb;
-        padding-bottom: 0.75rem; 
-        padding-right: 0; 
-    }
-}
-
 .note-interaction-panel { 
     flex-basis: 66.666667%;  
     padding-left: 0.75rem;  
@@ -297,13 +303,71 @@ body {
     flex-direction: column; 
     min-height: 0; 
 }
+
+/* Comfortable View Specifics */
+body.view-mode-comfortable #notes-content.showing-grid #notesPreviewColumnOuter {
+    flex-basis: 100%;
+    border-right: none;
+    padding-right: 0;
+}
+body.view-mode-comfortable #notes-content.showing-grid #notesListScrollableArea {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); /* Adjust minmax for card size */
+    gap: 1rem;
+    padding: 1rem; 
+}
+body.view-mode-comfortable #notes-content.showing-grid .note-preview-card {
+    margin-bottom: 0; /* Grid gap handles spacing */
+    min-height: 150px; /* Adjust card height for grid */
+}
+body.view-mode-comfortable #notes-content.showing-grid #noteInteractionPanel {
+    display: none; /* Hide editor in grid view */
+}
+
+/* Full Page Editor in Comfortable View */
+body.view-mode-comfortable #notes-content.showing-editor #notesPreviewColumnOuter {
+    display: none; /* Hide note list/grid */
+}
+body.view-mode-comfortable #notes-content.showing-editor #noteInteractionPanel {
+    display: flex; /* Ensure it's flex for internal layout */
+    flex-basis: 100%;
+    width: 100%;
+    height: 100%;
+    position: absolute; /* Or manage via parent flex if preferred */
+    top: 0;
+    left: 0;
+    background-color: white; /* Ensure it covers content behind */
+    z-index: 45; /* Above notes list, below modals */
+    padding: 1rem; /* Consistent padding */
+}
+body.view-mode-comfortable #notes-content.showing-editor #noteInteractionFormContainer {
+    padding-top: 0; /* Remove padding from form container as panel has it now */
+}
+
+
  @media (max-width: 767px) { 
+    /* Compact View Mobile */
+    #notesPreviewColumnOuter {
+        flex-basis: auto; 
+        margin-bottom: 0.75rem; 
+        border-right: none;
+        border-bottom: 1px solid #e5e7eb;
+        padding-bottom: 0.75rem; 
+        padding-right: 0; 
+    }
     .note-interaction-panel {
        flex-basis: auto; 
        padding-left: 0;
        margin-top: 0.75rem; 
     }
+
+    /* Comfortable View Mobile - Grid might become single column by default due to minmax */
+    body.view-mode-comfortable #notes-content.showing-grid #notesListScrollableArea {
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); /* Smaller cards on mobile */
+    }
+    /* Full page editor on mobile in comfortable view is inherently full page */
 }
+
 #notebookHeaderDisplay {
     background-color: #f0fdfa; 
     border: 1px solid #99f6e4; 
@@ -473,12 +537,15 @@ input:checked + .slider:before { transform: translateX(26px); }
     transform: scale(0.5);
     pointer-events: none;
 }
-#fabCreateNote { /* Create button on the right */
+#fabCreateNote { 
     right: 2rem;
 }
-.fab-back { /* Back button on the left */
-    left: 2rem; 
-    /* Color will be same as create button (default FAB style) */
+.fab-back { 
+    left: calc(7rem + 2rem); /* Sidebar fixed width (7rem) + desired gap (2rem) */
+    background-image: linear-gradient(to right, var(--theme-bg-button-primary) 0%, var(--theme-border-accent) 100%); /* Same color as create */
+}
+.fab-back:hover {
+    background-image: linear-gradient(to right, var(--theme-bg-button-primary-hover) 0%, var(--theme-border-accent) 100%);
 }
 
 
@@ -495,7 +562,7 @@ input:checked + .slider:before { transform: translateX(26px); }
     overflow: hidden; 
 }
 .sidebar {
-    width: 7rem; /* New fixed width for sidebar */
+    width: 7rem; /* Fixed wider sidebar */
     background-color: var(--theme-bg-sidebar); 
     color: var(--theme-text-on-dark); 
     display: flex; 
@@ -504,14 +571,13 @@ input:checked + .slider:before { transform: translateX(26px); }
     position: fixed; 
     left: 0; top: 0; bottom: 0; 
     z-index: 60; 
-    /* No transition needed for width anymore */
     overflow-x: hidden; 
     padding-top: 0.75rem; 
 }
-/* Remove .sidebar.expanded styles as it no longer expands */
+/* Removed .sidebar.expanded as it's now fixed width */
 
 .sidebar-icon {
-    padding: 0.85rem 0.5rem; /* Adjusted padding for better spacing */
+    padding: 0.85rem 0.25rem; /* Reduced horizontal padding to help with squishing */
     border-radius: 0.375rem; 
     cursor: pointer; 
     transition: background-color 0.2s ease-in-out;
@@ -520,29 +586,31 @@ input:checked + .slider:before { transform: translateX(26px); }
     align-items: center; 
     justify-content: center; 
     text-align: center; 
-    margin-bottom: 0.75rem; /* Increased space between items */
-    width: 100%; /* Ensure button takes full width of sidebar for centering */
+    margin-bottom: 1rem; /* Increased space between items */
+    width: 100%; 
 }
 .sidebar-icon i {
-    font-size: 1.65rem; /* Consistent larger icon size */
-    margin-bottom: 0.5rem; /* Space between icon and text */
-    line-height: 1; /* Prevent extra space from icon's line height */
+    font-size: 1.85rem; /* Increased icon size slightly */
+    margin-bottom: 0.4rem; /* Space between icon and text */
+    line-height: 1; 
 }
 .sidebar-icon .sidebar-text { 
     display: block; 
-    font-size: 0.75rem; /* Slightly larger text for better readability */
-    line-height: 1.2; /* Adjust line height for text */
+    font-size: 0.7rem; /* Slightly smaller text */
+    line-height: 1.15; 
     white-space: normal; 
     margin-left: 0; 
-    max-width: 90%; /* Prevent text from touching edges */
+    max-width: 95%; /* Allow text to use most of the button width */
+    word-wrap: break-word; /* Help with longer words */
 }
+
 .sidebar-icon:hover { 
     background-color: var(--theme-bg-sidebar-hover); 
 }
 .sidebar-main-navigation {
     display: flex;
     flex-direction: column;
-    gap: 0.25rem; 
+    gap: 0.1rem; /* Reduced gap for tighter packing if needed */
 }
 .sidebar-bottom-icons { 
     padding-bottom: 1rem; 
@@ -552,9 +620,8 @@ input:checked + .slider:before { transform: translateX(26px); }
 
 .main-content-area {
     flex-grow: 1; 
-    margin-left: 7rem; /* Fixed margin for new sidebar width */
+    margin-left: 7rem; /* Adjusted for new fixed sidebar width */
     height: 100%; 
-    /* No transition needed for margin-left anymore */
     display: flex; 
     flex-direction: column; 
     position: relative; 
