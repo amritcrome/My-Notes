@@ -27,6 +27,10 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// Placeholder User ID for testing before authentication
+const PLACEHOLDER_USER_ID = "Admintesting";
+const MEMOIR_DOCUMENT_NAME = "Memoir"; // The document ID for this app's data root under the user
+
 document.addEventListener('DOMContentLoaded', () => {
     // --- DATA STORAGE ---
     let localNotebooksCache = []; 
@@ -35,10 +39,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let localDeletedNotesCache = [];
     
     const initialDefaultThemeColors = [ 
-        "#047857", // Sidebar BG (emerald-700)
-        "#10b981", // Button Primary (emerald-500)
-        "#34d399", // Border Accent (emerald-400)
-        "#f0fdfa", // App Default BG / Note BG (emerald-50)
+        "#047857", 
+        "#10b981", 
+        "#34d399", 
+        "#f0fdfa", 
     ];
     
     const initialThemeSettings = { 
@@ -103,8 +107,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentNotesQueryConstraints = []; 
     let unsubscribeCurrentNotesListener = null; 
 
+    // --- Firestore Paths ---
+    const userMemoirDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}`;
 
     // --- DOM ELEMENTS ---
+    // ... (all your getElementById and querySelector calls remain the same) ...
     const loadingOverlay = document.getElementById('loadingOverlay');
     const appSidebar = document.getElementById('appSidebar');
     const mainContentArea = document.querySelector('.main-content-area'); 
@@ -237,12 +244,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const fabCreateNote = document.getElementById('fabCreateNote');
     const fabNavigateBack = document.getElementById('fabNavigateBack'); 
 
-    // Trash View Elements
     const deletedNotesListContainer = document.getElementById('deletedNotesListContainer');
     const noDeletedNotesMessage = document.getElementById('noDeletedNotesMessage');
     const emptyTrashBtn = document.getElementById('emptyTrashBtn');
 
-    // Restore Options Modal Elements
     const restoreNoteWithOptionsModal = document.getElementById('restoreNoteWithOptionsModal');
     const closeRestoreNoteWithOptionsModalBtn = document.getElementById('closeRestoreNoteWithOptionsModalBtn');
     const restoreNoteOptionsMessage = document.getElementById('restoreNoteOptionsMessage');
@@ -251,26 +256,24 @@ document.addEventListener('DOMContentLoaded', () => {
     const restoreToSelectedNotebookBtn = document.getElementById('restoreToSelectedNotebookBtn');
     const cancelRestoreWithOptionsBtn = document.getElementById('cancelRestoreWithOptionsBtn');
 
-    // Empty Trash Confirmation Modal Elements
     const confirmEmptyTrashModal = document.getElementById('confirmEmptyTrashModal');
     const closeConfirmEmptyTrashModalBtn = document.getElementById('closeConfirmEmptyTrashModalBtn');
     const cancelEmptyTrashBtn = document.getElementById('cancelEmptyTrashBtn');
     const executeEmptyTrashBtn = document.getElementById('executeEmptyTrashBtn');
 
-    // Export Settings Elements
     const exportNotebookSelector = document.getElementById('exportNotebookSelector');
     const exportNotebookBtn = document.getElementById('exportNotebookBtn');
     const exportStatusMessage = document.getElementById('exportStatusMessage');
 
-    // Unsubscribe functions - these need to be accessible within initializeDataListeners and its catch block
+    // Unsubscribe functions
     let unsubscribeAppSettings = null;
     let unsubscribeNotebooks = null;
     let unsubscribeTags = null;
     let unsubscribeDeletedNotes = null;
-    // unsubscribeCurrentNotesListener is already declared in lazy loading state
 
 
     // --- HELPER FUNCTIONS ---
+    // ... (All helper functions like showLoadingOverlay, formatDateFromTimestamp, etc. remain the same)
     function showLoadingOverlay(message = "Loading...") { if(loadingOverlay) { loadingOverlay.innerHTML = `<i class="fas fa-spinner fa-spin fa-2x mr-3"></i> ${message}`; loadingOverlay.classList.remove('hidden');} }
     function hideLoadingOverlay() { if(loadingOverlay) loadingOverlay.classList.add('hidden'); }
     function getTimeOfDay(date) { return date.getHours()>=5&&date.getHours()<12?"Morning":date.getHours()>=12&&date.getHours()<17?"Afternoon":date.getHours()>=17&&date.getHours()<21?"Evening":"Night"; }
@@ -395,7 +398,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- FIRESTORE DATA LISTENERS & LAZY LOADING ---
     function setupNotesListenerAndLoadInitialBatch() {
-        console.log("Setting up notes listener and loading initial batch. Context:", {currentlyViewedNotebookId, currentFilterTag, isFavoritesViewActive});
+        console.log("Setting up notes listener. Context:", {currentlyViewedNotebookId, currentFilterTag, isFavoritesViewActive});
         localNotesCache = []; 
         lastFetchedNoteDoc = null;
         noMoreNotesToLoad = false;
@@ -406,23 +409,37 @@ document.addEventListener('DOMContentLoaded', () => {
             unsubscribeCurrentNotesListener = null;
         }
 
-        let q_base;
-        let q_constraints = [];
+        let memoirDocRef = doc(db, "users", PLACEHOLDER_USER_ID, MEMOIR_DOCUMENT_NAME);
+        currentNotesQueryConstraints = []; // Reset constraints
 
         if (currentlyViewedNotebookId) {
-            q_base = collection(db, "notebooks", currentlyViewedNotebookId, "notes");
+            currentNotesQueryBase = collection(memoirDocRef, "notebooks", currentlyViewedNotebookId, "notes");
             if(allNotesPageTitle) {
-                const currentNb = localNotebooksCache.find(nb => nb.id === currentlyViewedNotebookId); // Use localNotebooksCache here
+                const currentNb = localNotebooksCache.find(nb => nb.id === currentlyViewedNotebookId); 
                 allNotesPageTitle.textContent = `Notes in "${currentNb ? currentNb.title : 'Selected Notebook'}"`;
             }
             if(notebookHeaderDisplay) displayNotebookHeader(currentlyViewedNotebookId);
         } else {
-            q_base = collectionGroup(db, "notes");
+            currentNotesQueryBase = collectionGroup(db, "notes");
+            // IMPORTANT: For collectionGroup queries to work with user-specific data, 
+            // ensure notes documents have a 'userId' field matching PLACEHOLDER_USER_ID
+            // and your Firestore rules allow querying collectionGroup 'notes' based on this field.
+            // For now, we also need to ensure notes are under the correct user path for collectionGroup.
+            // A direct path for all notes of a user would be:
+            // collection(db, `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/all_notes_flat`) 
+            // But this requires duplicating data or a more complex structure.
+            // Let's assume for now that collectionGroup 'notes' combined with a userId filter
+            // will work if notes are correctly pathed and have a userId field.
+            // This assumes notes are at /users/{userId}/Memoir/notebooks/{notebookId}/notes/{noteId}
+            // AND each note has a `userId: PLACEHOLDER_USER_ID` field.
+            currentNotesQueryConstraints.push(where("userId", "==", PLACEHOLDER_USER_ID));
+
+
             if (isFavoritesViewActive) {
-                q_constraints.push(where("isFavorite", "==", true));
+                currentNotesQueryConstraints.push(where("isFavorite", "==", true));
                 if(allNotesPageTitle) allNotesPageTitle.textContent = "Favorite Notes";
             } else if (currentFilterTag) {
-                q_constraints.push(where("tags", "array-contains", { name: currentFilterTag }));
+                currentNotesQueryConstraints.push(where("tags", "array-contains", { name: currentFilterTag }));
                  if(allNotesPageTitle) allNotesPageTitle.textContent = `Notes tagged: "${currentFilterTag}"`;
             } else {
                 if(allNotesPageTitle) allNotesPageTitle.textContent = "All Notes";
@@ -430,9 +447,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if(notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none';
         }
         
-        currentNotesQueryBase = q_base; 
-        currentNotesQueryConstraints = [...q_constraints]; 
-
         const initialQuery = query(
             currentNotesQueryBase, 
             ...currentNotesQueryConstraints, 
@@ -444,12 +458,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if(noNotesMessagePreviewEl) noNotesMessagePreviewEl.style.display = 'none'; 
 
         unsubscribeCurrentNotesListener = onSnapshot(initialQuery, (querySnapshot) => {
-            console.log("Initial notes batch snapshot received. Docs count:", querySnapshot.docs.length);
+            console.log("Initial notes batch snapshot. Docs:", querySnapshot.docs.length);
             const newNotesBatch = [];
             querySnapshot.forEach((noteDoc) => {
                 const data = noteDoc.data();
+                // Ensure new notes also get the placeholder userId if not already present from creation
                 newNotesBatch.push({ 
-                    id: noteDoc.id, ...data, notebookId: data.notebookId || noteDoc.ref.parent.parent.id, 
+                    id: noteDoc.id, ...data, userId: data.userId || PLACEHOLDER_USER_ID, 
+                    notebookId: data.notebookId || noteDoc.ref.parent.parent.id, 
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date()),
                     modifiedAt: data.modifiedAt?.toDate ? data.modifiedAt.toDate() : (data.modifiedAt ? new Date(data.modifiedAt) : new Date()),
                     edits: (data.edits || []).map(edit => ({ 
@@ -473,9 +489,7 @@ document.addEventListener('DOMContentLoaded', () => {
             hideLoadingOverlay();
         }, (error) => {
             console.error("Error fetching initial notes batch: ", error);
-            console.error("Initial notes batch error message: ", error.message);
-            console.error("Initial notes batch error stack: ", error.stack);
-            console.error("Initial notes batch error code: ", error.code);
+            console.error("Error details: ", error.message, error.code, error.stack);
             isLoadingMoreNotes = false;
             hideLoadingOverlay();
         });
@@ -486,15 +500,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         isLoadingMoreNotes = true;
-        if(noNotesMessagePreviewEl && notesListScrollableArea.querySelector('#loadingMoreSpinner')) { /* Already showing */ }
-        else if (noNotesMessagePreviewEl) { 
+        if(notesListScrollableArea.querySelector('#loadingMoreSpinner')) { /* Already showing */ }
+        else if (notesListScrollableArea) { 
             const spinner = document.createElement('div');
             spinner.id = 'loadingMoreSpinner';
             spinner.className = 'text-center py-4 text-gray-500';
             spinner.innerHTML = '<i class="fas fa-spinner fa-spin fa-lg"></i> Loading more...';
             notesListScrollableArea.appendChild(spinner);
         }
-
 
         console.log("Fetching more notes after:", lastFetchedNoteDoc.id);
 
@@ -512,7 +525,8 @@ document.addEventListener('DOMContentLoaded', () => {
             querySnapshot.forEach((noteDoc) => {
                 const data = noteDoc.data();
                 newNotesBatch.push({ 
-                    id: noteDoc.id, ...data, notebookId: data.notebookId || noteDoc.ref.parent.parent.id, 
+                    id: noteDoc.id, ...data, userId: data.userId || PLACEHOLDER_USER_ID,
+                    notebookId: data.notebookId || noteDoc.ref.parent.parent.id, 
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date()),
                     modifiedAt: data.modifiedAt?.toDate ? data.modifiedAt.toDate() : (data.modifiedAt ? new Date(data.modifiedAt) : new Date()),
                     edits: (data.edits || []).map(edit => ({ 
@@ -550,37 +564,33 @@ document.addEventListener('DOMContentLoaded', () => {
     async function initializeDataListeners() {
         showLoadingOverlay("Loading App Data...");
         try {
-            const appSettingsRef = doc(db, "app_settings", "global");
+            // Path to user-specific app settings document
+            const appSettingsPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/app_settings/user_specific_settings`;
+            const appSettingsRef = doc(db, appSettingsPath);
+
             unsubscribeAppSettings = onSnapshot(appSettingsRef, async (docSnap) => {
-                console.log("Firestore app_settings snapshot received.");
+                console.log("User app_settings snapshot received.");
                 if (docSnap.exists()) {
                     const settingsData = docSnap.data();
-                    console.log("Settings data from Firestore:", settingsData);
-                    
-                    themeSettings.appDefaultBackgroundColor = settingsData.activeThemeColors?.appDefaultBackgroundColor || initialThemeSettings.appDefaultBackgroundColor;
-                    themeSettings.themeSidebarBg = settingsData.activeThemeColors?.themeSidebarBg || initialThemeSettings.themeSidebarBg;
-                    themeSettings.themeButtonPrimary = settingsData.activeThemeColors?.themeButtonPrimary || initialThemeSettings.themeButtonPrimary;
-                    themeSettings.themeBorderAccent = settingsData.activeThemeColors?.themeBorderAccent || initialThemeSettings.themeBorderAccent;
-                    themeSettings.defaultHomepage = settingsData.defaultHomepage || initialThemeSettings.defaultHomepage; 
-                    themeSettings.viewMode = settingsData.viewMode || initialThemeSettings.viewMode; 
-                    
+                     Object.assign(themeSettings, settingsData); // Merge fetched settings
                     paletteColors = settingsData.paletteColors || [...initialPaletteColors]; 
                     defaultThemeColorsFromDB = settingsData.defaultThemeColors || [...initialDefaultThemeColors]; 
                 } else { 
-                    console.log("No app_settings found in Firestore, creating with initial defaults.");
+                    console.log("No user_app_settings found, creating with initial defaults.");
                     themeSettings = { ...initialThemeSettings }; 
                     paletteColors = [...initialPaletteColors];
                     defaultThemeColorsFromDB = [...initialDefaultThemeColors];
                     try { 
+                        // Create the Memoir document if it doesn't exist before setting app_settings
+                        const memoirDocRef = doc(db, `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}`);
+                        await setDoc(memoirDocRef, { initializedAt: serverTimestamp() }, {merge: true}); // Create/ensure Memoir doc
                         await setDoc(appSettingsRef, { 
-                            activeThemeColors: { ...initialThemeSettings }, 
-                            defaultThemeColors: [...initialDefaultThemeColors], 
+                            ...initialThemeSettings, // Save all initial settings including viewMode
                             paletteColors: [...initialPaletteColors],
-                            defaultHomepage: initialThemeSettings.defaultHomepage,
-                            viewMode: initialThemeSettings.viewMode 
+                            defaultThemeColors: [...initialDefaultThemeColors]
                         }); 
-                        console.log("Default app settings created in Firestore.");
-                    } catch (e) { console.error("Error creating default app settings:", e); }
+                        console.log("Default user app settings created in Firestore.");
+                    } catch (e) { console.error("Error creating default user app settings:", e); }
                 }
                 applyThemeSettings(); 
                 renderPaletteColors(); 
@@ -598,13 +608,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         currentFilterTag = null;
                         setupNotesListenerAndLoadInitialBatch(); 
                     } else if (themeSettings.defaultHomepage === 'trash') {
-                        renderDeletedNotesList();
+                        renderDeletedNotesList(); // This doesn't use Firestore listeners directly in this func
                     }
                     initialViewDetermined = true;
-                } else {
-                    if (notesContentDiv.classList.contains('main-view-content-active')) {
-                         setupNotesListenerAndLoadInitialBatch(); 
-                    }
+                } else if(notesContentDiv.classList.contains('main-view-content-active')) {
+                     // If settings changed (e.g. viewMode) and notes view is active, reload notes
+                     setupNotesListenerAndLoadInitialBatch();
                 }
                  hideLoadingOverlay();
             }, (error) => {
@@ -622,7 +631,8 @@ document.addEventListener('DOMContentLoaded', () => {
                  hideLoadingOverlay();
             });
 
-            const notebooksQuery = query(collection(db, "notebooks"), orderBy("createdAt", "desc"));
+            const notebooksCollectionPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks`;
+            const notebooksQuery = query(collection(db, notebooksCollectionPath), orderBy("createdAt", "desc"));
             unsubscribeNotebooks = onSnapshot(notebooksQuery, (querySnapshot) => {
                 const fetchedNotebooks = [];
                 querySnapshot.forEach((doc) => {
@@ -637,7 +647,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 populateExportNotebookSelector(); 
                 
                 if (localNotebooksCache.length === 0 && !querySnapshot.metadata.hasPendingWrites) { 
-                    initializeDefaultNotebookFirestore();
+                    initializeDefaultNotebookFirestore(); // Will also use PLACEHOLDER_USER_ID
                 }
             }, (error) => { 
                 console.error("Error fetching notebooks: ", error); 
@@ -648,7 +658,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert("Error loading notebooks."); 
             });
             
-            unsubscribeTags = onSnapshot(query(collection(db, "tags"), orderBy("name")), (querySnapshot) => {
+            const tagsCollectionPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/tags`;
+            unsubscribeTags = onSnapshot(query(collection(db, tagsCollectionPath), orderBy("name")), (querySnapshot) => {
                 const newLocalTagsCache = [];
                 const tagMap = new Map(); 
                 querySnapshot.forEach((doc) => {
@@ -664,7 +675,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 localTagsCache = Array.from(tagMap.values()); 
                 renderTagsInSettings(); 
-                // renderAllNotesPreviews(); // Handled by notes listener
                 if (currentInteractingNoteIdInPanel) renderTagPills(); 
             }, (error) => { 
                 console.error("Error fetching tags: ", error); 
@@ -675,7 +685,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 alert("Error loading tags."); 
             });
 
-            const deletedNotesQuery = query(collection(db, "deleted_notes"), orderBy("deletedAt", "desc"));
+            const deletedNotesCollectionPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/deleted_notes`;
+            const deletedNotesQuery = query(collection(db, deletedNotesCollectionPath), orderBy("deletedAt", "desc"));
             unsubscribeDeletedNotes = onSnapshot(deletedNotesQuery, (querySnapshot) => {
                 const fetchedDeletedNotes = [];
                 querySnapshot.forEach((doc) => {
@@ -702,7 +713,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
 
-        } catch (caughtError) { // Renamed error to caughtError for clarity
+        } catch (caughtError) { 
             console.error("FATAL Error during initial listener setup phase. Full error object:", caughtError);
             if (caughtError && caughtError.name) console.error("Error Name:", caughtError.name);
             if (caughtError && caughtError.message) console.error("Error Message:", caughtError.message);
@@ -715,7 +726,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error("Could not stringify error object:", e);
             }
             
-            // Defensive unsubscribing
             try { if (typeof unsubscribeAppSettings === 'function') unsubscribeAppSettings(); } catch(e) { console.error("Error unsubscribing appSettings:", e); }
             try { if (typeof unsubscribeNotebooks === 'function') unsubscribeNotebooks(); } catch(e) { console.error("Error unsubscribing notebooks:", e); }
             try { if (typeof unsubscribeCurrentNotesListener === 'function') unsubscribeCurrentNotesListener(); } catch(e) { console.error("Error unsubscribing currentNotes:", e); }
@@ -800,7 +810,7 @@ document.addEventListener('DOMContentLoaded', () => {
                  if(fabNavigateBack) fabNavigateBack.classList.add('hidden');
             }
             clearInteractionPanel(true); 
-            setupNotesListenerAndLoadInitialBatch();
+            setupNotesListenerAndLoadInitialBatch(); 
         } else if (currentlyViewedNotebookId) { 
              if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
             isFavoritesViewActive = false; 
@@ -936,7 +946,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         applyCurrentViewMode(); 
 
-        // renderAllNotesPreviews(); // Handled by setupNotesListenerAndLoadInitialBatch or fetchMoreNotes
         renderTagsInSettings(); 
         renderNotebooksOnPage(); 
         renderDeletedNotesList();
@@ -950,13 +959,19 @@ document.addEventListener('DOMContentLoaded', () => {
             themeSettings[key] = value; 
             applyThemeSettings(); 
             try { 
-                const activeThemeColorsToSave = {
-                    appDefaultBackgroundColor: themeSettings.appDefaultBackgroundColor,
-                    themeSidebarBg: themeSettings.themeSidebarBg,
-                    themeButtonPrimary: themeSettings.themeButtonPrimary,
-                    themeBorderAccent: themeSettings.themeBorderAccent
+                const settingsToSave = {
+                    activeThemeColors: {
+                        appDefaultBackgroundColor: themeSettings.appDefaultBackgroundColor,
+                        themeSidebarBg: themeSettings.themeSidebarBg,
+                        themeButtonPrimary: themeSettings.themeButtonPrimary,
+                        themeBorderAccent: themeSettings.themeBorderAccent
+                    },
+                    defaultHomepage: themeSettings.defaultHomepage,
+                    viewMode: themeSettings.viewMode,
+                    // paletteColors and defaultThemeColors are managed separately or during reset
                 };
-                await setDoc(doc(db, "app_settings", "global"), { activeThemeColors: activeThemeColorsToSave }, { merge: true }); 
+                const appSettingsPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/app_settings/user_specific_settings`;
+                await setDoc(doc(db, appSettingsPath), settingsToSave, { merge: true }); 
             } catch (e) { 
                 console.error("Error updating theme setting:", e); 
                 alert("Failed to save theme."); 
@@ -969,15 +984,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const newDefaultPage = event.target.value;
             themeSettings.defaultHomepage = newDefaultPage; 
             try {
-                await setDoc(doc(db, "app_settings", "global"), { defaultHomepage: newDefaultPage }, { merge: true });
+                const appSettingsPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/app_settings/user_specific_settings`;
+                await setDoc(doc(db, appSettingsPath), { defaultHomepage: newDefaultPage }, { merge: true });
             } catch (e) {
                 console.error("Error updating default homepage setting:", e);
                 alert("Failed to save default homepage preference.");
-                const appSettingsSnap = await getDoc(doc(db, "app_settings", "global"));
-                if (appSettingsSnap.exists()) {
-                    themeSettings.defaultHomepage = appSettingsSnap.data().defaultHomepage || initialThemeSettings.defaultHomepage;
-                    defaultHomepageSelector.value = themeSettings.defaultHomepage;
-                }
+                // Revert UI if save fails? Or rely on next snapshot. For now, let snapshot handle it.
             }
         });
     }
@@ -986,7 +998,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (viewModeCompactRadio.checked) {
                 themeSettings.viewMode = 'compact';
                 try {
-                    await setDoc(doc(db, "app_settings", "global"), { viewMode: 'compact' }, { merge: true });
+                    const appSettingsPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/app_settings/user_specific_settings`;
+                    await setDoc(doc(db, appSettingsPath), { viewMode: 'compact' }, { merge: true });
                     applyCurrentViewMode();
                     if (notesContentDiv.classList.contains('main-view-content-active')) {
                         setupNotesListenerAndLoadInitialBatch(); 
@@ -1000,7 +1013,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (viewModeComfortableRadio.checked) {
                 themeSettings.viewMode = 'comfortable';
                 try {
-                    await setDoc(doc(db, "app_settings", "global"), { viewMode: 'comfortable' }, { merge: true });
+                    const appSettingsPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/app_settings/user_specific_settings`;
+                    await setDoc(doc(db, appSettingsPath), { viewMode: 'comfortable' }, { merge: true });
                     applyCurrentViewMode();
                      if (notesContentDiv.classList.contains('main-view-content-active')) {
                         setupNotesListenerAndLoadInitialBatch(); 
@@ -1023,20 +1037,22 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log("Reset confirmed by user via custom modal.");
             showLoadingOverlay("Resetting theme...");
             try {
-                await setDoc(doc(db, "app_settings", "global"), { 
-                    activeThemeColors: { ...initialThemeSettings }, 
+                const appSettingsPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/app_settings/user_specific_settings`;
+                await setDoc(doc(db, appSettingsPath), { 
+                    activeThemeColors: { ...initialThemeSettings }, // Note: initialThemeSettings doesn't have paletteColors or defaultThemeColors
                     defaultThemeColors: [...initialDefaultThemeColors], 
                     paletteColors: [...initialPaletteColors], 
                     defaultHomepage: initialThemeSettings.defaultHomepage,
                     viewMode: initialThemeSettings.viewMode 
                 });
+                // Also reset the document `/users/{userId}/Memoir` if it holds paletteColors directly, though current settings are under app_settings subcollection
                 console.log("Reset theme command sent to Firestore successfully.");
             } catch (e) {
                 console.error("Error resetting theme in Firestore:", e);
                 alert("Failed to reset theme in Firestore. Check console.");
             } finally {
                 if (confirmThemeResetModal) confirmThemeResetModal.style.display = 'none';
-                hideLoadingOverlay();
+                hideLoadingOverlay(); // Will be hidden by the appSettings snapshot listener
             }
         });
     }
@@ -1079,7 +1095,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const originalColor = paletteColors[index]; 
                     paletteColors.splice(index, 1); 
                     try { 
-                        await setDoc(doc(db, "app_settings", "global"), { paletteColors: paletteColors }, { merge: true }); 
+                        const appSettingsPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/app_settings/user_specific_settings`;
+                        await setDoc(doc(db, appSettingsPath), { paletteColors: paletteColors }, { merge: true }); 
                         renderPaletteColors(); 
                         updatePaletteLimitMessage();
                     } catch (err) { 
@@ -1107,7 +1124,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (newColor && !paletteColors.includes(newColor)) { 
                 paletteColors.push(newColor); 
                 try { 
-                    await setDoc(doc(db, "app_settings", "global"), { paletteColors: paletteColors }, { merge: true }); 
+                    const appSettingsPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/app_settings/user_specific_settings`;
+                    await setDoc(doc(db, appSettingsPath), { paletteColors: paletteColors }, { merge: true }); 
                     renderPaletteColors(); 
                     newPaletteColorPicker.value = "#000000"; 
                 } catch (e) { 
@@ -1184,13 +1202,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const newNotebook = { 
+            userId: PLACEHOLDER_USER_ID, // Add userId
             title: cnNotebookTitleField.value.trim() || "Untitled Notebook", 
             purpose: cnNotebookPurposeField.value.trim(), 
             createdAt: serverTimestamp(), 
             notesCount: 0, 
             coverColor: finalCoverColor 
         }; 
-        try { const docRef = await addDoc(collection(db, "notebooks"), newNotebook); } catch (e) { console.error("Error adding notebook: ", e); alert("Failed to create notebook."); } 
+        try { 
+            const notebooksCollectionPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks`;
+            const docRef = await addDoc(collection(db, notebooksCollectionPath), newNotebook); 
+        } catch (e) { console.error("Error adding notebook: ", e); alert("Failed to create notebook."); } 
         if(createNotebookModal) createNotebookModal.style.display = 'none'; 
         createNotebookForm.reset(); 
         currentSelectedNotebookCoverColor_create = null;
@@ -1207,7 +1229,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const notebookId = editingNotebookIdField.value;
         if (!notebookId) { hideLoadingOverlay(); return; }
 
-        const notebookRef = doc(db, "notebooks", notebookId);
+        const notebookDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${notebookId}`;
+        const notebookRef = doc(db, notebookDocPath);
         const updates = {
             title: enNotebookTitleField.value.trim() || "Untitled Notebook",
             purpose: enNotebookPurposeField.value.trim(),
@@ -1284,7 +1307,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showLoadingOverlay(`Moving notes from "${notebookName}" to Trash...`);
         try {
             const batch = writeBatch(db);
-            const notesInNotebookRef = collection(db, "notebooks", notebookId, "notes");
+            const notesInNotebookRef = collection(db, `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${notebookId}/notes`);
             const notesSnapshot = await getDocs(notesInNotebookRef);
             const notesToMoveIds = []; 
             let tagsFromMovedNotes = new Set();
@@ -1292,13 +1315,14 @@ document.addEventListener('DOMContentLoaded', () => {
             notesSnapshot.forEach(noteDoc => {
                 const noteData = noteDoc.data();
                 const deletedNoteData = {
-                    ...noteData,
+                    ...noteData, // Includes userId from original note
                     originalNoteId: noteDoc.id,
                     originalNotebookId: notebookId,
                     originalNotebookName: notebookName,
                     deletedAt: serverTimestamp()
                 };
-                const newDeletedNoteRef = doc(collection(db, "deleted_notes"));
+                const deletedNotesCollectionPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/deleted_notes`;
+                const newDeletedNoteRef = doc(collection(db, deletedNotesCollectionPath));
                 batch.set(newDeletedNoteRef, deletedNoteData);
                 batch.delete(noteDoc.ref); 
                 
@@ -1308,7 +1332,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            const notebookRef = doc(db, "notebooks", notebookId);
+            const notebookDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${notebookId}`;
+            const notebookRef = doc(db, notebookDocPath);
             batch.delete(notebookRef); 
             await batch.commit();
 
@@ -1368,8 +1393,9 @@ document.addEventListener('DOMContentLoaded', () => {
         showLoadingOverlay("Deleting Permanently...");
         
         if (noteActionContext.isDeletedNote) { 
+            const deletedNoteDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/deleted_notes/${noteActionContext.id}`;
             try {
-                await deleteDoc(doc(db, "deleted_notes", noteActionContext.id));
+                await deleteDoc(doc(db, deletedNoteDocPath));
             } catch (e) { console.error("Error deleting note permanently from trash:", e); alert("Failed to delete note permanently."); }
         }
         hideLoadingOverlay();
@@ -1383,14 +1409,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         showLoadingOverlay("Moving to Trash...");
         try {
-            const noteRef = doc(db, "notebooks", notebookId, "notes", noteId);
+            const noteDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${notebookId}/notes/${noteId}`;
+            const noteRef = doc(db, noteDocPath);
             const noteSnap = await getDoc(noteRef);
             if (noteSnap.exists()) {
                 const noteData = noteSnap.data();
                 const originalNotebook = localNotebooksCache.find(nb => nb.id === notebookId);
                 
                 const deletedNoteData = {
-                    ...noteData,
+                    ...noteData, // Includes userId from original note
                     originalNoteId: noteId,
                     originalNotebookId: notebookId,
                     originalNotebookName: originalNotebook ? originalNotebook.title : "Unknown Notebook",
@@ -1398,11 +1425,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
                 
                 const batch = writeBatch(db);
-                const newDeletedNoteRef = doc(collection(db, "deleted_notes"));
+                const deletedNotesCollectionPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/deleted_notes`;
+                const newDeletedNoteRef = doc(collection(db, deletedNotesCollectionPath));
                 batch.set(newDeletedNoteRef, deletedNoteData);
                 batch.delete(noteRef);
 
-                const parentNotebookRef = doc(db, "notebooks", notebookId);
+                const parentNotebookDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${notebookId}`;
+                const parentNotebookRef = doc(db, parentNotebookDocPath);
                 const parentNotebookSnap = await getDoc(parentNotebookRef);
                 if (parentNotebookSnap.exists()) {
                     batch.update(parentNotebookRef, { notesCount: Math.max(0, (parentNotebookSnap.data().notesCount || 0) - 1) });
@@ -1435,7 +1464,38 @@ document.addEventListener('DOMContentLoaded', () => {
     function openEditTagModal(tagId) { const tag = localTagsCache.find(t => t.id === tagId); if (!tag) return; editingTagIdField.value = tag.id; editingOriginalTagNameField.value = tag.name; etTagNameField.value = tag.name; currentSelectedColorForTagEdit = tag.color || DEFAULT_TAG_COLOR; if(etTagColorDisplay) etTagColorDisplay.value = currentSelectedColorForTagEdit; if(editTagPaletteContainer) { editTagPaletteContainer.innerHTML = ''; paletteColors.forEach(color => { const swatch = document.createElement('div'); swatch.className = 'palette-color-swatch inline-block mr-2 mb-2'; swatch.style.backgroundColor = color; swatch.dataset.colorValue = color; if (color === currentSelectedColorForTagEdit) swatch.classList.add('selected-for-tag-edit'); swatch.addEventListener('click', () => { currentSelectedColorForTagEdit = color; if(etTagColorDisplay) { etTagColorDisplay.value = color; etTagColorDisplay.style.backgroundColor = color; etTagColorDisplay.style.color = getTextColorForBackground(color); } editTagPaletteContainer.querySelectorAll('.palette-color-swatch').forEach(s => s.classList.remove('selected-for-tag-edit')); swatch.classList.add('selected-for-tag-edit'); }); editTagPaletteContainer.appendChild(swatch); }); } etTagPurposeField.value = tag.purpose || ''; if (deleteTagBtn) deleteTagBtn.disabled = false; if(editTagModal) editTagModal.style.display = 'flex'; etTagNameField.focus(); }
     function closeEditTagModal() { if(editTagModal) editTagModal.style.display = 'none'; if(editTagForm) editTagForm.reset(); editingOriginalTagNameField.value = ''; editingTagIdField.value = ''; if (deleteTagBtn) deleteTagBtn.disabled = false; currentSelectedColorForTagEdit = DEFAULT_TAG_COLOR; }
     function closeConfirmTagDeleteModal() { if (confirmTagDeleteModal) confirmTagDeleteModal.style.display = 'none'; if (deleteTagBtn) deleteTagBtn.disabled = false; tagToDeleteGlobally = { id: null, name: null }; }
-    async function handleSaveTagChanges(event) { event.preventDefault(); const tagId = editingTagIdField.value; const originalName = editingOriginalTagNameField.value; const newName = etTagNameField.value.trim().toLowerCase(); const newColor = currentSelectedColorForTagEdit; const newPurpose = etTagPurposeField.value.trim(); if (!newName) { alert("Tag name cannot be empty."); return; } if (newName !== originalName && localTagsCache.some(t => t.name === newName && t.id !== tagId)) { alert(`Tag "${newName}" already exists.`); return; } const tagRef = doc(db, "tags", tagId); try { await updateDoc(tagRef, { name: newName, color: newColor, purpose: newPurpose }); if (originalName !== newName) { const batch = writeBatch(db); const notesWithOldTagQuery = query(collectionGroup(db, "notes"), where("tags", "array-contains", { name: originalName })); const notesSnapshot = await getDocs(notesWithOldTagQuery); notesSnapshot.forEach(noteDoc => { const noteData = noteDoc.data(); const updatedTags = noteData.tags.map(t => t.name === originalName ? { ...t, name: newName } : t); batch.update(noteDoc.ref, { tags: updatedTags }); }); await batch.commit(); } } catch (e) { console.error("Error updating tag:", e); alert("Failed to update tag."); } closeEditTagModal(); }
+    async function handleSaveTagChanges(event) { 
+        event.preventDefault(); 
+        const tagId = editingTagIdField.value; 
+        const originalName = editingOriginalTagNameField.value; 
+        const newName = etTagNameField.value.trim().toLowerCase(); 
+        const newColor = currentSelectedColorForTagEdit; 
+        const newPurpose = etTagPurposeField.value.trim(); 
+        if (!newName) { alert("Tag name cannot be empty."); return; } 
+        if (newName !== originalName && localTagsCache.some(t => t.name === newName && t.id !== tagId)) { alert(`Tag "${newName}" already exists.`); return; } 
+        
+        const tagDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/tags/${tagId}`;
+        const tagRef = doc(db, tagDocPath); 
+        
+        try { 
+            await updateDoc(tagRef, { name: newName, color: newColor, purpose: newPurpose, userId: PLACEHOLDER_USER_ID }); 
+            if (originalName !== newName) { 
+                // Update tags in notes - This part becomes more complex with collectionGroup and user-specific paths
+                // For now, this might need to be a broader update or handled differently if tags are strictly per user.
+                // Assuming for now that tag names are unique globally for the user.
+                const batch = writeBatch(db);
+                const notesToUpdateQuery = query(collectionGroup(db, "notes"), where("userId", "==", PLACEHOLDER_USER_ID), where("tags", "array-contains", { name: originalName }));
+                const notesSnapshot = await getDocs(notesToUpdateQuery); 
+                notesSnapshot.forEach(noteDoc => { 
+                    const noteData = noteDoc.data(); 
+                    const updatedTags = noteData.tags.map(t => t.name === originalName ? { ...t, name: newName } : t); 
+                    batch.update(noteDoc.ref, { tags: updatedTags }); 
+                }); 
+                await batch.commit(); 
+            } 
+        } catch (e) { console.error("Error updating tag:", e); alert("Failed to update tag."); } 
+        closeEditTagModal(); 
+    }
     function handleDeleteTagConfirmation() { if (deleteTagBtn && deleteTagBtn.disabled) return; const tagId = editingTagIdField.value; const tagName = editingOriginalTagNameField.value; if (!tagId || !tagName) return; tagToDeleteGlobally = { id: tagId, name: tagName }; if(deleteTagBtn) deleteTagBtn.disabled = true; if (tagNameToDeleteDisplay) tagNameToDeleteDisplay.textContent = tagName; if (confirmTagDeleteModal) confirmTagDeleteModal.style.display = 'flex'; }
     async function performActualTagDeletion(tagId, tagName) { 
         if (!tagId || !tagName) return; 
@@ -1443,9 +1503,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const tagNameLower = tagName.toLowerCase();
         try { 
             const batch = writeBatch(db); 
-            const tagRef = doc(db, "tags", tagId); 
+            const tagDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/tags/${tagId}`;
+            const tagRef = doc(db, tagDocPath); 
             batch.delete(tagRef); 
-            const notesWithTagQuery = query(collectionGroup(db, "notes"), where("tags", "array-contains", { name: tagNameLower })); 
+            
+            // This collectionGroup query will need to be efficient. Ensure 'userId' and 'tags' are indexed if necessary.
+            const notesWithTagQuery = query(collectionGroup(db, "notes"), where("userId", "==", PLACEHOLDER_USER_ID), where("tags", "array-contains", { name: tagNameLower })); 
             const notesSnapshot = await getDocs(notesWithTagQuery); 
             notesSnapshot.forEach(noteDoc => { 
                 const noteData = noteDoc.data(); 
@@ -1463,15 +1526,21 @@ document.addEventListener('DOMContentLoaded', () => {
     async function checkAndCleanupOrphanedTag(tagName) {
         if (!tagName) return;
         const tagNameLower = tagName.toLowerCase();
-        const notesWithTagQuery = query(collectionGroup(db, "notes"), where("tags", "array-contains", { name: tagNameLower }), limit(1));
+        // Query notes for this specific user that contain the tag
+        const notesWithTagQuery = query(collectionGroup(db, "notes"), 
+                                      where("userId", "==", PLACEHOLDER_USER_ID), 
+                                      where("tags", "array-contains", { name: tagNameLower }), 
+                                      limit(1));
         try {
             const notesSnapshot = await getDocs(notesWithTagQuery);
             if (notesSnapshot.empty) { 
-                const tagsQueryToDelete = query(collection(db, "tags"), where("name", "==", tagNameLower));
+                // If no notes found for this user with this tag, delete the tag for this user
+                const tagsCollectionPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/tags`;
+                const tagsQueryToDelete = query(collection(db, tagsCollectionPath), where("name", "==", tagNameLower));
                 const tagDocsSnapshot = await getDocs(tagsQueryToDelete);
                 if (!tagDocsSnapshot.empty) {
                     const tagDocToDelete = tagDocsSnapshot.docs[0]; 
-                    await deleteDoc(doc(db, "tags", tagDocToDelete.id));
+                    await deleteDoc(doc(db, tagsCollectionPath, tagDocToDelete.id));
                 }
             }
         } catch (e) {
@@ -1540,7 +1609,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     
         const editsDescription = interactionPanelEditsMadeInputField.value.trim();
-        const noteRef = doc(db, "notebooks", currentInteractingNoteOriginalNotebookId, "notes", currentInteractingNoteIdInPanel);
+        const noteRef = doc(db, `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${currentInteractingNoteOriginalNotebookId}/notes/${currentInteractingNoteIdInPanel}`);
     
         try {
             await runTransaction(db, async (transaction) => {
@@ -1849,14 +1918,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (favStarDivSelected && favoriteIconSelected) {
                 favStarDivSelected.classList.toggle('is-favorite', noteToEdit.isFavorite || false);
                 favoriteIconSelected.className = noteToEdit.isFavorite ? 'fas fa-star' : 'far fa-star';
-                if (currentPreviewEl.classList.contains('selected')) { // Check if currentPreviewEl has 'selected'
+                if (currentPreviewEl.classList.contains('selected')) { 
                      favoriteIconSelected.style.color = noteToEdit.isFavorite ? '#FBBF24' : '#FFFFFF';
                 } else {
                      favoriteIconSelected.style.color = noteToEdit.isFavorite ? '#FBBF24' : '#a0aec0';
                 }
             }
             if (deleteIconSelected) {
-                // Use currentPreviewEl here instead of previewEl
                 deleteIconSelected.style.color = currentPreviewEl.classList.contains('selected') ? '#f87171' : '#ef4444'; 
             }
 
@@ -1886,8 +1954,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (tempNote && tempNote.title.trim() === "" && tempNote.text.trim() === "" && (!tempNote.activity || tempNote.activity.trim() === "")) {
                 if(isSwitchingContext || (!noteTitleInputField_panel.value.trim() && !noteTextInputField_panel.value.trim())){ 
                     try {
-                        await deleteDoc(doc(db, "notebooks", tempNote.notebookId, "notes", noteBeingProcessedId));
-                        const notebookRef = doc(db, "notebooks", tempNote.notebookId);
+                        const tempNoteDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${tempNote.notebookId}/notes/${noteBeingProcessedId}`;
+                        await deleteDoc(doc(db, tempNoteDocPath));
+                        const notebookDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${tempNote.notebookId}`;
+                        const notebookRef = doc(db, notebookDocPath);
                         const notebookSnap = await getDoc(notebookRef);
                         if (notebookSnap.exists()) {
                             await updateDoc(notebookRef, { notesCount: Math.max(0, (notebookSnap.data().notesCount || 0) - 1) });
@@ -2094,7 +2164,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (noteToToggle) { 
                     const newFavStatus = !noteToToggle.isFavorite; 
                     try { 
-                        await updateDoc(doc(db, "notebooks", noteToToggle.notebookId, "notes", note.id), { isFavorite: newFavStatus }); 
+                        const noteDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${noteToToggle.notebookId}/notes/${note.id}`;
+                        await updateDoc(doc(db, noteDocPath), { isFavorite: newFavStatus }); 
                     } catch (err) { console.error("Error updating favorite:", err); alert("Could not update favorite."); } 
                 } 
             }); 
@@ -2172,6 +2243,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function updateGlobalTagsFromNoteInput(tagNamesArray) { 
         if (!tagNamesArray || tagNamesArray.length === 0) return [];
         const newTagObjectsForNote = [];
+        const tagsCollectionPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/tags`;
 
         for (const rawTagName of tagNamesArray) {
             const tagName = rawTagName.toLowerCase().trim(); 
@@ -2180,7 +2252,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let existingTag = localTagsCache.find(t => t.name === tagName); 
             
             if (!existingTag) { 
-                const tagQuery = query(collection(db, "tags"), where("name", "==", tagName), limit(1)); 
+                const tagQuery = query(collection(db, tagsCollectionPath), where("name", "==", tagName), limit(1)); 
                 const querySnapshot = await getDocs(tagQuery);
                 if (!querySnapshot.empty) {
                     existingTag = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() };
@@ -2192,8 +2264,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!existingTag) { 
                 try {
-                    const newTagData = { name: tagName, color: DEFAULT_TAG_COLOR, purpose: '' }; 
-                    const docRef = await addDoc(collection(db, "tags"), newTagData);
+                    const newTagData = { name: tagName, color: DEFAULT_TAG_COLOR, purpose: '', userId: PLACEHOLDER_USER_ID }; 
+                    const docRef = await addDoc(collection(db, tagsCollectionPath), newTagData);
                     existingTag = { id: docRef.id, ...newTagData }; 
                     localTagsCache.push(existingTag); 
                 } catch (e) { 
@@ -2220,12 +2292,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (title === "" && text.trim() === "" && (!activityValue || activityValue === "") && currentNoteTagsArrayInPanel.length === 0) return; 
             try {
                 const newNoteData = { 
+                    userId: PLACEHOLDER_USER_ID, // Add userId
                     notebookId: currentOpenNotebookIdForPanel, 
                     title: title || "Untitled Note", text, tags: processedTagsForNote, 
                     createdAt: serverTimestamp(), modifiedAt: serverTimestamp(),
                     activity: activityValue || "", edits: [], isFavorite: false 
                 };
-                const docRef = await addDoc(collection(db, "notebooks", currentOpenNotebookIdForPanel, "notes"), newNoteData);
+                const notesCollectionPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${currentOpenNotebookIdForPanel}/notes`;
+                const docRef = await addDoc(collection(db, notesCollectionPath), newNoteData);
                 currentInteractingNoteIdInPanel = docRef.id; 
                 activelyCreatingNoteId = docRef.id; 
                 currentInteractingNoteOriginalNotebookId = currentOpenNotebookIdForPanel; 
@@ -2236,27 +2310,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 lastSavedNoteTagsInPanel = currentNoteTagsArrayInPanel.slice().sort().join(',');
                 lastSavedNoteActivityInPanel = newNoteData.activity || '';
                 
-                const parentNotebookRef = doc(db, "notebooks", currentOpenNotebookIdForPanel);
+                const parentNotebookDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${currentOpenNotebookIdForPanel}`;
+                const parentNotebookRef = doc(db, parentNotebookDocPath);
                 const parentNotebookSnap = await getDoc(parentNotebookRef);
                 if (parentNotebookSnap.exists()) {
                     await updateDoc(parentNotebookRef, { notesCount: (parentNotebookSnap.data().notesCount || 0) + 1 });
                 }
-                
-                // After first save, "My edits" section can be shown if user edits main text
-                if(noteTextInputField_panel && interactionPanelCurrentEditSessionContainer) {
-                     const handleFirstMainEditAfterSave = () => {
-                        if (currentInteractingNoteIdInPanel === docRef.id) { 
-                           if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'block';
-                           currentEditSessionOpenTimePanel = new Date(); 
-                           currentEditSessionEntryId = null; 
-                           if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = '';
-                        }
-                    };
-                    noteTextInputField_panel.removeEventListener('input', handleFirstMainEditAfterSave); 
-                    noteTextInputField_panel.addEventListener('input', handleFirstMainEditAfterSave, { once: true });
-                    noteTextInputField_panel._handleFirstMainEditListener = handleFirstMainEditAfterSave;
-                }
-
+                // "My edits" section logic now handled by displayNoteInInteractionPanel's input listener
+                // after this initial save and subsequent reload via snapshot.
 
             } catch (e) { console.error("Error creating new note:", e); alert("Failed to save new note."); }
         } else if (currentInteractingNoteIdInPanel && existingNoteData) { 
@@ -2266,7 +2327,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (selectedNotebookIdInPanel && originalNotebookIdOfNote && selectedNotebookIdInPanel !== originalNotebookIdOfNote) {
                 showLoadingOverlay("Moving note...");
                 try {
-                    const noteToMoveRef = doc(db, "notebooks", originalNotebookIdOfNote, "notes", currentInteractingNoteIdInPanel);
+                    const noteToMoveRef = doc(db, `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${originalNotebookIdOfNote}/notes/${currentInteractingNoteIdInPanel}`);
                     const noteSnap = await getDoc(noteToMoveRef);
                     if (!noteSnap.exists()) throw new Error("Note to move not found.");
                     const noteDataToMove = noteSnap.data();
@@ -2274,13 +2335,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     const wasThisTheActivelyCreatedNote = (activelyCreatingNoteId === currentInteractingNoteIdInPanel);
 
                     const batch = writeBatch(db);
-                    const newNoteRefAfterMove = doc(collection(db, "notebooks", selectedNotebookIdInPanel, "notes")); 
-                    batch.set(newNoteRefAfterMove, { ...noteDataToMove, notebookId: selectedNotebookIdInPanel, title: title || noteDataToMove.title, text, tags: processedTagsForNote, modifiedAt: serverTimestamp() });
+                    const newNoteRefAfterMove = doc(collection(db, `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${selectedNotebookIdInPanel}/notes`)); 
+                    batch.set(newNoteRefAfterMove, { ...noteDataToMove, userId: PLACEHOLDER_USER_ID, notebookId: selectedNotebookIdInPanel, title: title || noteDataToMove.title, text, tags: processedTagsForNote, modifiedAt: serverTimestamp() });
                     batch.delete(noteToMoveRef);
-                    const oldNotebookRef = doc(db, "notebooks", originalNotebookIdOfNote);
+                    
+                    const oldNotebookDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${originalNotebookIdOfNote}`;
+                    const oldNotebookRef = doc(db, oldNotebookDocPath);
                     const oldNotebookSnap = await getDoc(oldNotebookRef); 
                     if(oldNotebookSnap.exists()) batch.update(oldNotebookRef, { notesCount: Math.max(0, (oldNotebookSnap.data().notesCount || 0) - 1) });
-                    const newNotebookRefDoc = doc(db, "notebooks", selectedNotebookIdInPanel); 
+                    
+                    const newNotebookDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${selectedNotebookIdInPanel}`;
+                    const newNotebookRefDoc = doc(db, newNotebookDocPath); 
                     const newNotebookSnap = await getDoc(newNotebookRefDoc); 
                     if(newNotebookSnap.exists()) batch.update(newNotebookRefDoc, { notesCount: (newNotebookSnap.data().notesCount || 0) + 1 });
                     
@@ -2357,7 +2422,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (contentActuallyChanged) {
                     updates.modifiedAt = serverTimestamp();
                     try {
-                        const noteToUpdateRef = doc(db, "notebooks", originalNotebookIdOfNote, "notes", currentInteractingNoteIdInPanel);
+                        const noteDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${originalNotebookIdOfNote}/notes/${currentInteractingNoteIdInPanel}`;
+                        const noteToUpdateRef = doc(db, noteDocPath);
                         await updateDoc(noteToUpdateRef, updates);
                         console.log("Note updated with changes:", updates);
                         if (updates.title !== undefined) lastSavedNoteTitleInPanel = updates.title;
@@ -2457,11 +2523,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function initializeDefaultNotebookFirestore() { 
         const defaultNotebookName = "My Notes 😏";
-        const existingDefaultQuery = query(collection(db, "notebooks"), where("title", "==", defaultNotebookName)); 
+        const notebooksCollectionPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks`;
+        const existingDefaultQuery = query(collection(db, notebooksCollectionPath), where("title", "==", defaultNotebookName), where("userId", "==", PLACEHOLDER_USER_ID)); 
         const querySnapshot = await getDocs(existingDefaultQuery); 
         if (querySnapshot.empty) { 
             try { 
-                await addDoc(collection(db, "notebooks"), { 
+                // Ensure the Memoir document exists or is created
+                const memoirDocRef = doc(db, `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}`);
+                await setDoc(memoirDocRef, { userId: PLACEHOLDER_USER_ID, appName: "Memoir Notes" }, { merge: true });
+
+                await addDoc(collection(db, notebooksCollectionPath), { 
+                    userId: PLACEHOLDER_USER_ID,
                     title: defaultNotebookName, 
                     purpose: "Default notebook for your quick notes.", 
                     createdAt: serverTimestamp(), 
@@ -2631,16 +2703,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 delete noteDataToRestore.id; 
                 delete noteDataToRestore.deletedAt;
                 delete noteDataToRestore.originalNoteId; 
-                noteDataToRestore.notebookId = noteToRestoreWithOptions.originalNotebookId;
+                noteDataToRestore.notebookId = noteToRestoreWithOptions.originalNotebookId; // This is the ID from the original notebook collection
+                noteDataToRestore.userId = PLACEHOLDER_USER_ID; // Ensure userId is set
                 delete noteDataToRestore.originalNotebookName;
                 noteDataToRestore.modifiedAt = serverTimestamp(); 
 
                 const batch = writeBatch(db);
-                const newNoteRef = doc(collection(db, "notebooks", noteDataToRestore.notebookId, "notes"));
+                const newNotePath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${noteDataToRestore.notebookId}/notes`;
+                const newNoteRef = doc(collection(db, newNotePath));
                 batch.set(newNoteRef, noteDataToRestore);
-                batch.delete(doc(db, "deleted_notes", deletedNoteId));
                 
-                const notebookRef = doc(db, "notebooks", noteDataToRestore.notebookId);
+                const deletedNoteDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/deleted_notes/${deletedNoteId}`;
+                batch.delete(doc(db, deletedNoteDocPath));
+                
+                const notebookDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${noteDataToRestore.notebookId}`;
+                const notebookRef = doc(db, notebookDocPath);
                 const notebookSnap = await getDoc(notebookRef);
                 if (notebookSnap.exists()) {
                     batch.update(notebookRef, { notesCount: (notebookSnap.data().notesCount || 0) + 1 });
@@ -2692,17 +2769,19 @@ document.addEventListener('DOMContentLoaded', () => {
             showLoadingOverlay("Creating notebook and restoring note...");
             try {
                 const newNotebookTitle = noteToRestoreWithOptions.originalNotebookName || "Restored Notes";
+                const notebooksCollectionPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks`;
                 let targetNotebookId = localNotebooksCache.find(nb => nb.title === newNotebookTitle)?.id;
 
                 if (!targetNotebookId) {
                     const newNotebookData = {
+                        userId: PLACEHOLDER_USER_ID,
                         title: newNotebookTitle,
                         purpose: "Created for restored notes.",
                         createdAt: serverTimestamp(),
                         notesCount: 0,
                         coverColor: paletteColors.length > 0 ? paletteColors[0] : null
                     };
-                    const newNotebookRef = await addDoc(collection(db, "notebooks"), newNotebookData);
+                    const newNotebookRef = await addDoc(collection(db, notebooksCollectionPath), newNotebookData);
                     targetNotebookId = newNotebookRef.id;
                 }
                 
@@ -2711,15 +2790,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 delete noteDataToRestore.deletedAt;
                 delete noteDataToRestore.originalNoteId;
                 noteDataToRestore.notebookId = targetNotebookId; 
+                noteDataToRestore.userId = PLACEHOLDER_USER_ID;
                 delete noteDataToRestore.originalNotebookName;
                 noteDataToRestore.modifiedAt = serverTimestamp();
 
                 const batch = writeBatch(db);
-                const newNoteRef = doc(collection(db, "notebooks", targetNotebookId, "notes"));
+                const newNotePath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${targetNotebookId}/notes`;
+                const newNoteRef = doc(collection(db, newNotePath));
                 batch.set(newNoteRef, noteDataToRestore);
-                batch.delete(doc(db, "deleted_notes", noteToRestoreWithOptions.id));
+
+                const deletedNoteDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/deleted_notes/${noteToRestoreWithOptions.id}`;
+                batch.delete(doc(db, deletedNoteDocPath));
                 
-                const notebookRef = doc(db, "notebooks", targetNotebookId);
+                const notebookDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${targetNotebookId}`;
+                const notebookRef = doc(db, notebookDocPath);
                 const notebookSnap = await getDoc(notebookRef);
                 if (notebookSnap.exists()) {
                     batch.update(notebookRef, { notesCount: (notebookSnap.data().notesCount || 0) + 1 });
@@ -2747,15 +2831,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 delete noteDataToRestore.deletedAt;
                 delete noteDataToRestore.originalNoteId;
                 noteDataToRestore.notebookId = targetNotebookId;
+                noteDataToRestore.userId = PLACEHOLDER_USER_ID;
                 delete noteDataToRestore.originalNotebookName;
                 noteDataToRestore.modifiedAt = serverTimestamp();
 
                 const batch = writeBatch(db);
-                const newNoteRef = doc(collection(db, "notebooks", targetNotebookId, "notes"));
+                const newNotePath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${targetNotebookId}/notes`;
+                const newNoteRef = doc(collection(db, newNotePath));
                 batch.set(newNoteRef, noteDataToRestore);
-                batch.delete(doc(db, "deleted_notes", noteToRestoreWithOptions.id));
+
+                const deletedNoteDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/deleted_notes/${noteToRestoreWithOptions.id}`;
+                batch.delete(doc(db, deletedNoteDocPath));
                 
-                const notebookRef = doc(db, "notebooks", targetNotebookId);
+                const notebookDocPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${targetNotebookId}`;
+                const notebookRef = doc(db, notebookDocPath);
                 const notebookSnap = await getDoc(notebookRef);
                 if (notebookSnap.exists()) {
                     batch.update(notebookRef, { notesCount: (notebookSnap.data().notesCount || 0) + 1 });
@@ -2787,8 +2876,9 @@ document.addEventListener('DOMContentLoaded', () => {
             showLoadingOverlay("Emptying Trash...");
             try {
                 const batch = writeBatch(db);
+                const deletedNotesCollectionPath = `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/deleted_notes`;
                 localDeletedNotesCache.forEach(note => {
-                    batch.delete(doc(db, "deleted_notes", note.id));
+                    batch.delete(doc(db, deletedNotesCollectionPath, note.id));
                 });
                 await batch.commit();
             } catch (e) {
@@ -2844,7 +2934,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error("Selected notebook not found in local cache.");
                 }
 
-                const notesCollectionRef = collection(db, "notebooks", selectedNotebookId, "notes");
+                const notesCollectionRef = collection(db, `users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks/${selectedNotebookId}/notes`);
                 const notesSnapshot = await getDocs(notesCollectionRef);
                 const notesForExport = [];
                 notesSnapshot.forEach(noteDoc => {
@@ -2872,7 +2962,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     purpose: notebookToExport.purpose || "",
                     coverColor: notebookToExport.coverColor || null,
                     createdAt: convertTimestampToISO(notebookToExport.createdAt),
-                    notes: notesForExport
+                    notes: notesForExport,
+                    // Add userId to the export for potential import by the same user later
+                    userId: PLACEHOLDER_USER_ID 
                 };
 
                 const jsonString = JSON.stringify(exportData, null, 2);
@@ -2900,11 +2992,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // Initial call to setup notes if the default view is notes-related
     if (themeSettings.defaultHomepage === 'notes' || themeSettings.defaultHomepage === 'favorites') {
         setupNotesListenerAndLoadInitialBatch();
     } else {
-        renderAllNotesPreviews(); // Render empty or placeholder if not notes view
+        renderAllNotesPreviews(); 
     }
     renderTagsInSettings(); 
     clearInteractionPanel(false); 
