@@ -262,6 +262,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportNotebookBtn = document.getElementById('exportNotebookBtn');
     const exportStatusMessage = document.getElementById('exportStatusMessage');
 
+    // Unsubscribe functions - these need to be accessible within initializeDataListeners and its catch block
+    let unsubscribeAppSettings = null;
+    let unsubscribeNotebooks = null;
+    let unsubscribeTags = null;
+    let unsubscribeDeletedNotes = null;
+    // unsubscribeCurrentNotesListener is already declared in lazy loading state
+
 
     // --- HELPER FUNCTIONS ---
     function showLoadingOverlay(message = "Loading...") { if(loadingOverlay) { loadingOverlay.innerHTML = `<i class="fas fa-spinner fa-spin fa-2x mr-3"></i> ${message}`; loadingOverlay.classList.remove('hidden');} }
@@ -405,7 +412,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentlyViewedNotebookId) {
             q_base = collection(db, "notebooks", currentlyViewedNotebookId, "notes");
             if(allNotesPageTitle) {
-                const currentNb = localNotebooksCache.find(nb => nb.id === currentlyViewedNotebookId);
+                const currentNb = localNotebooksCache.find(nb => nb.id === currentlyViewedNotebookId); // Use localNotebooksCache here
                 allNotesPageTitle.textContent = `Notes in "${currentNb ? currentNb.title : 'Selected Notebook'}"`;
             }
             if(notebookHeaderDisplay) displayNotebookHeader(currentlyViewedNotebookId);
@@ -657,7 +664,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 localTagsCache = Array.from(tagMap.values()); 
                 renderTagsInSettings(); 
-                // renderAllNotesPreviews(); // This will be handled by notes listener
+                // renderAllNotesPreviews(); // Handled by notes listener
                 if (currentInteractingNoteIdInPanel) renderTagPills(); 
             }, (error) => { 
                 console.error("Error fetching tags: ", error); 
@@ -695,19 +702,28 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
 
-        } catch (error) { 
-            console.error("FATAL Error during initial listener setup phase. Full error object:", error); 
-            console.error("Error Name:", error.name);
-            console.error("Error Message:", error.message);
-            console.error("Error Stack:", error.stack);
-            console.error("Error Code (if Firebase error):", error.code);
+        } catch (caughtError) { // Renamed error to caughtError for clarity
+            console.error("FATAL Error during initial listener setup phase. Full error object:", caughtError);
+            if (caughtError && caughtError.name) console.error("Error Name:", caughtError.name);
+            if (caughtError && caughtError.message) console.error("Error Message:", caughtError.message);
+            if (caughtError && caughtError.stack) console.error("Error Stack:", caughtError.stack);
+            if (caughtError && caughtError.code) console.error("Error Code (if Firebase error):", caughtError.code);
+            
             try {
-                console.error("Stringified Error:", JSON.stringify(error, Object.getOwnPropertyNames(error)));
+                console.error("Stringified Error:", JSON.stringify(caughtError, Object.getOwnPropertyNames(caughtError)));
             } catch (e) {
                 console.error("Could not stringify error object:", e);
             }
-            alert("A critical error occurred while initializing the app. Please check the console (F12) for more details and contact support if the issue persists."); 
-            hideLoadingOverlay(); 
+            
+            // Defensive unsubscribing
+            try { if (typeof unsubscribeAppSettings === 'function') unsubscribeAppSettings(); } catch(e) { console.error("Error unsubscribing appSettings:", e); }
+            try { if (typeof unsubscribeNotebooks === 'function') unsubscribeNotebooks(); } catch(e) { console.error("Error unsubscribing notebooks:", e); }
+            try { if (typeof unsubscribeCurrentNotesListener === 'function') unsubscribeCurrentNotesListener(); } catch(e) { console.error("Error unsubscribing currentNotes:", e); }
+            try { if (typeof unsubscribeTags === 'function') unsubscribeTags(); } catch(e) { console.error("Error unsubscribing tags:", e); }
+            try { if (typeof unsubscribeDeletedNotes === 'function') unsubscribeDeletedNotes(); } catch(e) { console.error("Error unsubscribing deletedNotes:", e); }
+            
+            alert("A critical error occurred during app initialization. Please check the console (F12) for more details and contact support if the issue persists.");
+            hideLoadingOverlay();
         }
     }
     initializeDataListeners();
@@ -778,13 +794,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if(notesPreviewColumnOuter) notesPreviewColumnOuter.style.display = 'flex';
             if(fabCreateNote) fabCreateNote.classList.remove('hidden');
             
-            if (currentlyViewedNotebookId) { // If we were viewing a specific notebook's notes
-                if(fabNavigateBack) fabNavigateBack.classList.remove('hidden'); // Keep back button to go to Notebooks page
-            } else { // Otherwise, we are back at the main "All Notes" grid
+            if (currentlyViewedNotebookId) { 
+                if(fabNavigateBack) fabNavigateBack.classList.remove('hidden'); 
+            } else { 
                  if(fabNavigateBack) fabNavigateBack.classList.add('hidden');
             }
             clearInteractionPanel(true); 
-            setupNotesListenerAndLoadInitialBatch(); // Re-load notes for the current context (which might be a specific notebook)
+            setupNotesListenerAndLoadInitialBatch();
         } else if (currentlyViewedNotebookId) { 
              if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
             isFavoritesViewActive = false; 
@@ -920,7 +936,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         applyCurrentViewMode(); 
 
-        // renderAllNotesPreviews(); // Now handled by setupNotesListenerAndLoadInitialBatch or fetchMoreNotes
+        // renderAllNotesPreviews(); // Handled by setupNotesListenerAndLoadInitialBatch or fetchMoreNotes
         renderTagsInSettings(); 
         renderNotebooksOnPage(); 
         renderDeletedNotesList();
@@ -1833,13 +1849,14 @@ document.addEventListener('DOMContentLoaded', () => {
             if (favStarDivSelected && favoriteIconSelected) {
                 favStarDivSelected.classList.toggle('is-favorite', noteToEdit.isFavorite || false);
                 favoriteIconSelected.className = noteToEdit.isFavorite ? 'fas fa-star' : 'far fa-star';
-                if (currentPreviewEl.classList.contains('selected')) { 
+                if (currentPreviewEl.classList.contains('selected')) { // Check if currentPreviewEl has 'selected'
                      favoriteIconSelected.style.color = noteToEdit.isFavorite ? '#FBBF24' : '#FFFFFF';
                 } else {
                      favoriteIconSelected.style.color = noteToEdit.isFavorite ? '#FBBF24' : '#a0aec0';
                 }
             }
             if (deleteIconSelected) {
+                // Use currentPreviewEl here instead of previewEl
                 deleteIconSelected.style.color = currentPreviewEl.classList.contains('selected') ? '#f87171' : '#ef4444'; 
             }
 
@@ -1948,8 +1965,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isCurrentlyShowingEditor = themeSettings.viewMode === 'comfortable' && notesContentDiv.classList.contains('showing-editor');
 
         if (isCurrentlyShowingEditor && !currentlyViewedNotebookId && !currentFilterTag && !isFavoritesViewActive) {
-            // If in full-page editor for a general "All Notes" new note, don't render previews.
-            notesListScrollableArea.innerHTML = ''; // Clear if it was a general new note
+            notesListScrollableArea.innerHTML = ''; 
             noNotesMessagePreviewEl.style.display = 'none';
             return;
         }
@@ -1985,13 +2001,13 @@ document.addEventListener('DOMContentLoaded', () => {
         } 
         noNotesMessagePreviewEl.style.display = 'none'; 
         
-        // notesToDisplay is already localNotesCache which is sorted by the listener
+        notesToDisplay.sort((a,b) => (b.modifiedAt?.toMillis?.() || new Date(b.modifiedAt).getTime()) - (a.modifiedAt?.toMillis?.() || new Date(a.modifiedAt).getTime()));
         
         notesToDisplay.forEach(note => { 
             const notebook = localNotebooksCache.find(nb => nb.id === note.notebookId); 
             const previewEl = document.createElement('div'); 
             previewEl.className = 'note-preview-card'; 
-            if (isCurrentlyShowingGrid) { // Apply grid style if in comfortable grid view
+            if (isCurrentlyShowingGrid) { 
                 previewEl.classList.add('grid-card-style'); 
             } else {
                 previewEl.classList.remove('grid-card-style');
@@ -2891,8 +2907,6 @@ document.addEventListener('DOMContentLoaded', () => {
         renderAllNotesPreviews(); // Render empty or placeholder if not notes view
     }
     renderTagsInSettings(); 
-    // renderNotebooksOnPage(); // This is called by initializeDataListeners -> appSettingsRef -> applyThemeSettings
-    // renderDeletedNotesList(); // This is called by initializeDataListeners -> deletedNotesQuery
     clearInteractionPanel(false); 
     
 });
