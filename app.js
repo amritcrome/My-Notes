@@ -3,7 +3,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
 import { 
     getFirestore, collection, collectionGroup, addDoc, getDoc, getDocs, doc, updateDoc, deleteDoc, 
-    query, where, onSnapshot, orderBy, serverTimestamp, Timestamp, writeBatch, runTransaction, limit, setDoc
+    query, where, onSnapshot, orderBy, serverTimestamp, Timestamp, writeBatch, runTransaction, limit, startAfter // Added startAfter
 } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js"; 
 
 // ==========================================================================================
@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
         themeBorderAccent: initialDefaultThemeColors[2],
         appDefaultBackgroundColor: initialDefaultThemeColors[3],
         defaultHomepage: "notebooks",
-        viewMode: "compact" // Default view mode
+        viewMode: "compact" 
     };
     
     const initialPaletteColors = ["#a7f3d0", "#6ee7b7", "#34d399", "#10b981", "#059669", "#fde047", "#facc15", "#eab308", "#f3f4f6"]; 
@@ -94,13 +94,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let lastSavedNoteActivityInPanel = "";
     let currentNoteTagsArrayInPanel = []; 
 
-
-    // Unsubscribe functions
-    let unsubscribeNotebooks = null;
-    let unsubscribeNotes = null;
-    let unsubscribeTags = null;
-    let unsubscribeAppSettings = null;
-    let unsubscribeDeletedNotes = null;
+    // --- Lazy Loading State ---
+    let lastFetchedNoteDoc = null; // Stores the DocumentSnapshot of the last fetched note
+    let isLoadingMoreNotes = false;
+    let noMoreNotesToLoad = false;
+    const NOTES_BATCH_SIZE = 15; // Number of notes to fetch per batch
+    let currentNotesQueryBase = null; // To store the base query for the current view
+    let currentNotesQueryConstraints = []; // To store additional constraints like 'where' clauses
+    let unsubscribeCurrentNotesListener = null; // To manage the active notes listener for the initial batch
 
 
     // --- DOM ELEMENTS ---
@@ -385,12 +386,163 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 
-    // --- FIRESTORE DATA LISTENERS ---
+    // --- FIRESTORE DATA LISTENERS & LAZY LOADING ---
+    function setupNotesListenerAndLoadInitialBatch() {
+        console.log("Setting up notes listener and loading initial batch. Context:", {currentlyViewedNotebookId, currentFilterTag, isFavoritesViewActive});
+        localNotesCache = []; // Reset cache for new context
+        lastFetchedNoteDoc = null;
+        noMoreNotesToLoad = false;
+        isLoadingMoreNotes = false; // Reset loading flag
+
+        if (unsubscribeCurrentNotesListener) {
+            unsubscribeCurrentNotesListener(); // Unsubscribe from previous listener
+            unsubscribeCurrentNotesListener = null;
+        }
+
+        let q_base;
+        let q_constraints = [];
+
+        if (currentlyViewedNotebookId) {
+            q_base = collection(db, "notebooks", currentlyViewedNotebookId, "notes");
+            if(allNotesPageTitle) {
+                const currentNb = localNotebooksCache.find(nb => nb.id === currentlyViewedNotebookId);
+                allNotesPageTitle.textContent = `Notes in "${currentNb ? currentNb.title : 'Selected Notebook'}"`;
+            }
+            if(notebookHeaderDisplay) displayNotebookHeader(currentlyViewedNotebookId);
+        } else {
+            q_base = collectionGroup(db, "notes");
+            if (isFavoritesViewActive) {
+                q_constraints.push(where("isFavorite", "==", true));
+                if(allNotesPageTitle) allNotesPageTitle.textContent = "Favorite Notes";
+            } else if (currentFilterTag) {
+                q_constraints.push(where("tags", "array-contains", { name: currentFilterTag }));
+                 if(allNotesPageTitle) allNotesPageTitle.textContent = `Notes tagged: "${currentFilterTag}"`;
+            } else {
+                if(allNotesPageTitle) allNotesPageTitle.textContent = "All Notes";
+            }
+            if(notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none';
+        }
+        
+        currentNotesQueryBase = q_base; // Store for fetchMoreNotes
+        currentNotesQueryConstraints = [...q_constraints]; // Store for fetchMoreNotes
+
+        const initialQuery = query(
+            currentNotesQueryBase, 
+            ...currentNotesQueryConstraints, 
+            orderBy("modifiedAt", "desc"), 
+            limit(NOTES_BATCH_SIZE)
+        );
+
+        if(notesListScrollableArea) notesListScrollableArea.innerHTML = ''; // Clear previous notes immediately
+        if(noNotesMessagePreviewEl) noNotesMessagePreviewEl.style.display = 'none'; // Hide no notes message initially
+
+        unsubscribeCurrentNotesListener = onSnapshot(initialQuery, (querySnapshot) => {
+            console.log("Initial notes batch snapshot received. Docs count:", querySnapshot.docs.length);
+            const newNotesBatch = [];
+            querySnapshot.forEach((noteDoc) => {
+                const data = noteDoc.data();
+                newNotesBatch.push({ 
+                    id: noteDoc.id, ...data, notebookId: data.notebookId || noteDoc.ref.parent.parent.id, 
+                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date()),
+                    modifiedAt: data.modifiedAt?.toDate ? data.modifiedAt.toDate() : (data.modifiedAt ? new Date(data.modifiedAt) : new Date()),
+                    edits: (data.edits || []).map(edit => ({ 
+                        ...edit, 
+                        id: edit.id || doc(collection(db, '_placeholder')).id, 
+                        timestamp: edit.timestamp?.toDate ? edit.timestamp.toDate() : (edit.timestamp ? new Date(edit.timestamp) : new Date()) 
+                    }))
+                });
+            });
+
+            localNotesCache = newNotesBatch; // Replace cache with the initial batch
+            if (querySnapshot.docs.length > 0) {
+                lastFetchedNoteDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
+            } else {
+                lastFetchedNoteDoc = null;
+            }
+            noMoreNotesToLoad = querySnapshot.docs.length < NOTES_BATCH_SIZE;
+            
+            renderAllNotesPreviews(); // Render the initial batch
+            isLoadingMoreNotes = false; 
+            hideLoadingOverlay();
+        }, (error) => {
+            console.error("Error fetching initial notes batch: ", error);
+            isLoadingMoreNotes = false;
+            hideLoadingOverlay();
+        });
+    }
+
+    async function fetchMoreNotes() {
+        if (isLoadingMoreNotes || noMoreNotesToLoad || !lastFetchedNoteDoc) {
+            return;
+        }
+        isLoadingMoreNotes = true;
+        if(noNotesMessagePreviewEl && notesListScrollableArea.querySelector('#loadingMoreSpinner')) { /* Already showing */ }
+        else if (noNotesMessagePreviewEl) { // Add spinner if not already there
+            const spinner = document.createElement('div');
+            spinner.id = 'loadingMoreSpinner';
+            spinner.className = 'text-center py-4 text-gray-500';
+            spinner.innerHTML = '<i class="fas fa-spinner fa-spin fa-lg"></i> Loading more...';
+            notesListScrollableArea.appendChild(spinner);
+        }
+
+
+        console.log("Fetching more notes after:", lastFetchedNoteDoc.id);
+
+        const nextQuery = query(
+            currentNotesQueryBase,
+            ...currentNotesQueryConstraints,
+            orderBy("modifiedAt", "desc"),
+            startAfter(lastFetchedNoteDoc),
+            limit(NOTES_BATCH_SIZE)
+        );
+
+        try {
+            const querySnapshot = await getDocs(nextQuery);
+            const newNotesBatch = [];
+            querySnapshot.forEach((noteDoc) => {
+                const data = noteDoc.data();
+                newNotesBatch.push({ 
+                    id: noteDoc.id, ...data, notebookId: data.notebookId || noteDoc.ref.parent.parent.id, 
+                    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date()),
+                    modifiedAt: data.modifiedAt?.toDate ? data.modifiedAt.toDate() : (data.modifiedAt ? new Date(data.modifiedAt) : new Date()),
+                    edits: (data.edits || []).map(edit => ({ 
+                        ...edit, 
+                        id: edit.id || doc(collection(db, '_placeholder')).id,
+                        timestamp: edit.timestamp?.toDate ? edit.timestamp.toDate() : (edit.timestamp ? new Date(edit.timestamp) : new Date()) 
+                    }))
+                });
+            });
+
+            if (newNotesBatch.length > 0) {
+                localNotesCache = [...localNotesCache, ...newNotesBatch]; // Append new notes
+                lastFetchedNoteDoc = querySnapshot.docs[querySnapshot.docs.length - 1];
+            }
+            noMoreNotesToLoad = newNotesBatch.length < NOTES_BATCH_SIZE;
+            renderAllNotesPreviews(); // Re-render with appended notes
+        } catch (error) {
+            console.error("Error fetching more notes:", error);
+        } finally {
+            isLoadingMoreNotes = false;
+            const spinnerEl = notesListScrollableArea.querySelector('#loadingMoreSpinner');
+            if (spinnerEl) spinnerEl.remove();
+        }
+    }
+
+    if (notesListScrollableArea) {
+        notesListScrollableArea.addEventListener('scroll', () => {
+            if (notesListScrollableArea.scrollTop + notesListScrollableArea.clientHeight >= notesListScrollableArea.scrollHeight - 200) {
+                fetchMoreNotes();
+            }
+        });
+    }
+
+
     async function initializeDataListeners() {
         showLoadingOverlay("Loading App Data...");
         try {
             const appSettingsRef = doc(db, "app_settings", "global");
             unsubscribeAppSettings = onSnapshot(appSettingsRef, async (docSnap) => {
+                // ... (app settings loading logic - remains largely the same) ...
                 console.log("Firestore app_settings snapshot received.");
                 if (docSnap.exists()) {
                     const settingsData = docSnap.data();
@@ -430,21 +582,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (viewModeComfortableRadio) viewModeComfortableRadio.checked = themeSettings.viewMode === 'comfortable';
 
                 if (!initialViewDetermined && db) {
-                    switchToMainView(themeSettings.defaultHomepage);
+                    switchToMainView(themeSettings.defaultHomepage); // This will trigger setupNotesListenerAndLoadInitialBatch if notes view is default
                     if (themeSettings.defaultHomepage === 'notes' || themeSettings.defaultHomepage === 'favorites') {
                         isFavoritesViewActive = themeSettings.defaultHomepage === 'favorites';
                         currentlyViewedNotebookId = null; 
                         currentFilterTag = null;
-                        if(allNotesPageTitle) allNotesPageTitle.textContent = isFavoritesViewActive ? "Favorite Notes" : "All Notes";
-                        if(notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none';
+                        setupNotesListenerAndLoadInitialBatch(); // Explicitly call for these views
                     } else if (themeSettings.defaultHomepage === 'trash') {
                         renderDeletedNotesList();
                     }
                     initialViewDetermined = true;
+                } else {
+                    // If already initialized and settings change (e.g., viewMode), re-apply view
+                    if (notesContentDiv.classList.contains('main-view-content-active')) {
+                         setupNotesListenerAndLoadInitialBatch(); // Re-evaluate notes for current context
+                    }
                 }
-                renderAllNotesPreviews(); 
-                renderTagsInSettings(); 
-                renderNotebooksOnPage(); 
+                 hideLoadingOverlay(); // Moved here to ensure it's called after initial setup
             }, (error) => {
                 console.error("Error fetching app settings:", error);
                 themeSettings = { ...initialThemeSettings }; paletteColors = [...initialPaletteColors]; defaultThemeColorsFromDB = [...initialDefaultThemeColors];
@@ -453,10 +607,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     switchToMainView(themeSettings.defaultHomepage); 
                     initialViewDetermined = true;
                 }
+                 hideLoadingOverlay();
             });
 
             const notebooksQuery = query(collection(db, "notebooks"), orderBy("createdAt", "desc"));
             unsubscribeNotebooks = onSnapshot(notebooksQuery, (querySnapshot) => {
+                // ... (notebooks loading logic - remains the same) ...
                 const fetchedNotebooks = [];
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
@@ -472,83 +628,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (localNotebooksCache.length === 0 && !querySnapshot.metadata.hasPendingWrites) { 
                     initializeDefaultNotebookFirestore();
                 }
-            }, (error) => { console.error("Error fetching notebooks: ", error); alert("Error loading notebooks."); hideLoadingOverlay(); });
+            }, (error) => { console.error("Error fetching notebooks: ", error); alert("Error loading notebooks.");  });
 
-            const notesGroupQuery = query(collectionGroup(db, "notes"), orderBy("modifiedAt", "desc"));
-            unsubscribeNotes = onSnapshot(notesGroupQuery, (querySnapshot) => {
-                const fetchedNotes = [];
-                querySnapshot.forEach((noteDoc) => { 
-                    const data = noteDoc.data();
-                    fetchedNotes.push({ 
-                        id: noteDoc.id, ...data, notebookId: data.notebookId || noteDoc.ref.parent.parent.id, 
-                        createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date()),
-                        modifiedAt: data.modifiedAt?.toDate ? data.modifiedAt.toDate() : (data.modifiedAt ? new Date(data.modifiedAt) : new Date()),
-                        edits: (data.edits || []).map(edit => ({ 
-                            ...edit, 
-                            id: edit.id || doc(collection(db, '_placeholder')).id, 
-                            timestamp: edit.timestamp?.toDate ? edit.timestamp.toDate() : (edit.timestamp ? new Date(edit.timestamp) : new Date()) 
-                        }))
-                    });
-                });
-                localNotesCache = fetchedNotes;
-                renderAllNotesPreviews(); 
-                if (settingsContentDiv && settingsContentDiv.classList.contains('main-view-content-active') && document.getElementById('tags-settings-section')?.classList.contains('settings-content-section-active')) { renderTagsInSettings(); }
-                
-                const isCurrentNoteModifiedBySnapshot = querySnapshot.docChanges().some(change => change.type === "modified" && change.doc.id === currentInteractingNoteIdInPanel);
-
-                if (currentInteractingNoteIdInPanel && !isNewNoteSessionInPanel) {
-                    const updatedNote = localNotesCache.find(n => n.id === currentInteractingNoteIdInPanel);
-                    if (updatedNote) {
-                        const currentEditDescValue = interactionPanelEditsMadeInputField ? interactionPanelEditsMadeInputField.value : null;
-                        const editSessionActive = currentEditSessionOpenTimePanel && currentEditSessionEntryId;
-                        
-                        // Update main note fields if not focused by the user
-                        if(noteTitleInputField_panel && document.activeElement !== noteTitleInputField_panel) {
-                            if (noteTitleInputField_panel.value !== updatedNote.title) noteTitleInputField_panel.value = updatedNote.title;
-                        }
-                        if(noteTextInputField_panel && document.activeElement !== noteTextInputField_panel) {
-                             if (noteTextInputField_panel.value !== updatedNote.text) noteTextInputField_panel.value = updatedNote.text;
-                        }
-                        
-                        const newTagsValue = (updatedNote.tags || []).map(tagObj => tagObj.name);
-                        if (document.activeElement !== noteTagsInputField_panel && JSON.stringify(currentNoteTagsArrayInPanel.sort()) !== JSON.stringify(newTagsValue.sort())) {
-                            currentNoteTagsArrayInPanel = newTagsValue;
-                            renderTagPills();
-                        }
-                        
-                        if(interactionPanelActivityInputField && (isAdminModeEnabled || activelyCreatingNoteId === updatedNote.id)) { 
-                            if(document.activeElement !== interactionPanelActivityInputField) {
-                                if(interactionPanelActivityInputField.value !== (updatedNote.activity || '')) interactionPanelActivityInputField.value = updatedNote.activity || '';
-                            }
-                        }
-                        updateNoteInfoPanel(updatedNote); 
-
-                        // If "My edits" was active and the note being updated is the current one, restore its content
-                        // This prevents the "My edits" field from clearing on a general note autosave.
-                        if (editSessionActive && interactionPanelEditsMadeInputField && currentEditDescValue !== null && 
-                            interactionPanelCurrentEditSessionContainer && interactionPanelCurrentEditSessionContainer.style.display === 'block') {
-                            // Only restore if the "My Edits" section is actually visible for this note.
-                            // This check is important because displayNoteInInteractionPanel might hide it based on its own logic
-                            // if the note context changed (e.g. a different note was loaded then quickly reloaded).
-                            if (currentInteractingNoteIdInPanel === updatedNote.id) {
-                                interactionPanelEditsMadeInputField.value = currentEditDescValue;
-                            }
-                        }
-
-                    } else if (isCurrentNoteModifiedBySnapshot) { 
-                        // Note was likely deleted from another client or context
-                        clearInteractionPanel();
-                    }
-                }
-                hideLoadingOverlay(); 
-            }, (error) => { 
-                console.error("Error fetching notes (collection group): ", error); 
-                let alertMessage = "Error loading notes. Firestore index might be required for 'notes' collection group, ordered by 'modifiedAt' (descending).\nCheck console (F12) for Firebase link to create index.";
-                alertMessage += `\n\nError: ${error.message} ${error.code ? `(Code: ${error.code})` : ""}`;
-                alert(alertMessage); hideLoadingOverlay(); 
-            });
+            // The main notes listener is now handled by setupNotesListenerAndLoadInitialBatch
+            // So, the direct collectionGroup listener for all notes is removed from here.
             
             unsubscribeTags = onSnapshot(query(collection(db, "tags"), orderBy("name")), (querySnapshot) => {
+                // ... (tags loading logic - remains the same) ...
                 const newLocalTagsCache = [];
                 const tagMap = new Map(); 
                 querySnapshot.forEach((doc) => {
@@ -566,10 +652,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderTagsInSettings(); 
                 renderAllNotesPreviews(); 
                 if (currentInteractingNoteIdInPanel) renderTagPills(); 
-            }, (error) => { console.error("Error fetching tags: ", error); alert("Error loading tags."); hideLoadingOverlay(); });
+            }, (error) => { console.error("Error fetching tags: ", error); alert("Error loading tags.");  });
 
             const deletedNotesQuery = query(collection(db, "deleted_notes"), orderBy("deletedAt", "desc"));
             unsubscribeDeletedNotes = onSnapshot(deletedNotesQuery, (querySnapshot) => {
+                // ... (deleted notes loading logic - remains the same) ...
                 const fetchedDeletedNotes = [];
                 querySnapshot.forEach((doc) => {
                     const data = doc.data();
@@ -619,7 +706,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentlyViewedNotebookId = null; 
             clearInteractionPanel(true); 
             switchToMainView('notes'); 
-            renderAllNotesPreviews(); 
+            setupNotesListenerAndLoadInitialBatch(); // Load initial batch for "All Notes"
         }); 
     }
     if(sidebarFavoritesBtn) { 
@@ -630,7 +717,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentFilterTag = null; 
             clearInteractionPanel(true); 
             switchToMainView('notes'); 
-            renderAllNotesPreviews(); 
+            setupNotesListenerAndLoadInitialBatch(); // Load initial batch for "Favorites"
         }); 
     }
     if(sidebarTrashBtn) { 
@@ -658,15 +745,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if(notesPreviewColumnOuter) notesPreviewColumnOuter.style.display = 'flex';
             if(fabCreateNote) fabCreateNote.classList.remove('hidden');
             
-            // Determine if back button should still be shown (e.g., if viewing a specific notebook's grid)
-            if (currentlyViewedNotebookId || currentFilterTag || isFavoritesViewActive) {
-                 if(fabNavigateBack) fabNavigateBack.classList.remove('hidden'); // Keep it if still in a filtered/notebook context
-            } else {
-                 if(fabNavigateBack) fabNavigateBack.classList.add('hidden'); // Hide if back to main "All Notes" grid
+            // If we were viewing a specific notebook's notes in the grid, keep back button to go to Notebooks page
+            if (currentlyViewedNotebookId) {
+                if(fabNavigateBack) fabNavigateBack.classList.remove('hidden');
+            } else { // Otherwise, we are back at the main "All Notes" grid
+                 if(fabNavigateBack) fabNavigateBack.classList.add('hidden');
             }
             clearInteractionPanel(true); 
-            renderAllNotesPreviews();
-        } else { 
+            // renderAllNotesPreviews(); // No need to call here, setupNotesListenerAndLoadInitialBatch will be called by switchToMainView if needed
+        } else if (currentlyViewedNotebookId) { // If in a specific notebook's notes (compact or comfortable grid)
             if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
             isFavoritesViewActive = false; 
             currentFilterTag = null; 
@@ -675,6 +762,14 @@ document.addEventListener('DOMContentLoaded', () => {
             switchToMainView('notebooks');
             if (notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none';
             if (allNotesPageTitle) allNotesPageTitle.textContent = "All Notes"; 
+        } else { // Fallback for other cases, e.g., from filtered "All Notes" back to general "All Notes"
+             if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
+            isFavoritesViewActive = false; 
+            currentFilterTag = null; 
+            currentlyViewedNotebookId = null; 
+            clearInteractionPanel(true); 
+            switchToMainView('notes'); // Go to general "All Notes"
+            setupNotesListenerAndLoadInitialBatch();
         }
     }
 
@@ -730,7 +825,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (fabNavigateBack) fabNavigateBack.classList.remove('hidden'); 
 
                 displayNotebookHeader(notebookId); 
-                renderAllNotesPreviews(); 
+                setupNotesListenerAndLoadInitialBatch(); // Load notes for this notebook
             });
 
             card.querySelector('.edit-notebook-icon-btn').addEventListener('click', (e) => {
@@ -793,7 +888,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         applyCurrentViewMode(); 
 
-        renderAllNotesPreviews(); 
+        // renderAllNotesPreviews(); // This will be called by setupNotesListenerAndLoadInitialBatch or fetchMoreNotes
         renderTagsInSettings(); 
         renderNotebooksOnPage(); 
         renderDeletedNotesList();
@@ -846,7 +941,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     await setDoc(doc(db, "app_settings", "global"), { viewMode: 'compact' }, { merge: true });
                     applyCurrentViewMode();
                     if (notesContentDiv.classList.contains('main-view-content-active')) {
-                        switchToMainView('notes'); 
+                        setupNotesListenerAndLoadInitialBatch(); // Reload notes with new view mode
                     }
                 } catch (e) { console.error("Error saving view mode:", e); }
             }
@@ -860,7 +955,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     await setDoc(doc(db, "app_settings", "global"), { viewMode: 'comfortable' }, { merge: true });
                     applyCurrentViewMode();
                      if (notesContentDiv.classList.contains('main-view-content-active')) {
-                        switchToMainView('notes'); 
+                        setupNotesListenerAndLoadInitialBatch(); // Reload notes with new view mode
                     }
                 } catch (e) { console.error("Error saving view mode:", e); }
             }
@@ -1177,7 +1272,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     currentFilterTag = null;
                     if(allNotesPageTitle) allNotesPageTitle.textContent = isFavoritesViewActive ? "Favorite Notes" : "All Notes";
                     if(notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none';
-                    renderAllNotesPreviews();
+                    setupNotesListenerAndLoadInitialBatch();
                 }
                 clearInteractionPanel(false);
             }
@@ -1394,7 +1489,7 @@ document.addEventListener('DOMContentLoaded', () => {
             !currentInteractingNoteIdInPanel || 
             isNewNoteSessionInPanel || 
             !currentInteractingNoteOriginalNotebookId ||
-            !currentEditSessionOpenTimePanel) { // Crucial: Only save if a "My edits" session was initiated
+            !currentEditSessionOpenTimePanel) { 
             return; 
         }
     
@@ -1416,7 +1511,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (currentEditSessionEntryId) { 
                         existingEdits = existingEdits.filter(edit => edit.id !== currentEditSessionEntryId);
                         currentEditSessionEntryId = null; 
-                        // currentEditSessionOpenTimePanel is kept to signify the section was "opened"
                         entryModified = true;
                     }
                 } else { 
@@ -1521,9 +1615,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function displayNoteInInteractionPanel(noteId, forceFocusToTitle = true) { 
         const previousInteractingNoteId = currentInteractingNoteIdInPanel;
-        const isSameNote = previousInteractingNoteId === noteId;
+        const isActuallySwitchingNotes = previousInteractingNoteId !== noteId;
 
-        if (!isSameNote && ((currentInteractingNoteIdInPanel && currentInteractingNoteIdInPanel !== noteId) || isNewNoteSessionInPanel) ) {
+        if (isActuallySwitchingNotes && ((currentInteractingNoteIdInPanel && currentInteractingNoteIdInPanel !== noteId) || isNewNoteSessionInPanel) ) {
             processInteractionPanelEditsOnDeselect(true); 
         }
         
@@ -1535,7 +1629,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentInteractingNoteOriginalNotebookId = noteToEdit.notebookId; 
         currentOpenNotebookIdForPanel = noteToEdit.notebookId; 
         
-        if (!isSameNote) { // Only reset edit session state if it's a truly different note
+        if (isActuallySwitchingNotes) { // Only reset edit session state if it's a truly different note
             currentEditSessionOpenTimePanel = null; 
             currentEditSessionEntryId = null; 
             if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
@@ -1551,18 +1645,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if(noteTitleInputField_panel) {
             const newTitle = noteToEdit.title || "";
-            if (document.activeElement !== noteTitleInputField_panel || !isSameNote) { 
+            if (document.activeElement !== noteTitleInputField_panel || isActuallySwitchingNotes) { 
                 if (noteTitleInputField_panel.value !== newTitle) noteTitleInputField_panel.value = newTitle;
             }
         }
         if(noteTextInputField_panel) {
             const newText = noteToEdit.text || "";
-             if (document.activeElement !== noteTextInputField_panel || !isSameNote) { 
+             if (document.activeElement !== noteTextInputField_panel || isActuallySwitchingNotes) { 
                 if (noteTextInputField_panel.value !== newText) noteTextInputField_panel.value = newText;
             }
             
-            // Logic to show "My edits" section
-            if (!isNewNoteSessionInPanel && currentInteractingNoteIdInPanel) { // Only for existing, loaded notes
+            if (!isNewNoteSessionInPanel && currentInteractingNoteIdInPanel) { 
                 const oldListener = noteTextInputField_panel._handleFirstMainEditListener;
                 if (oldListener) {
                     noteTextInputField_panel.removeEventListener('input', oldListener);
@@ -1576,16 +1669,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
                     }
                 };
-                // Add listener if no edit session is active for this note yet
-                if (!currentEditSessionOpenTimePanel) {
-                    noteTextInputField_panel.addEventListener('input', handleFirstMainEdit, { once: true });
-                    noteTextInputField_panel._handleFirstMainEditListener = handleFirstMainEdit;
-                } else if (interactionPanelCurrentEditSessionContainer) {
-                    // If a session was already active (e.g. from a previous interaction before a snapshot refresh), ensure it's visible
-                    interactionPanelCurrentEditSessionContainer.style.display = 'block';
+                
+                if (isActuallySwitchingNotes || !currentEditSessionOpenTimePanel) { // Add listener if new note or no session yet
+                     if(interactionPanelCurrentEditSessionContainer && interactionPanelCurrentEditSessionContainer.style.display === 'none'){
+                        noteTextInputField_panel.addEventListener('input', handleFirstMainEdit, { once: true });
+                        noteTextInputField_panel._handleFirstMainEditListener = handleFirstMainEdit;
+                     }
+                } else if (interactionPanelCurrentEditSessionContainer && currentEditSessionOpenTimePanel) {
+                     interactionPanelCurrentEditSessionContainer.style.display = 'block';
                 }
             } else if (interactionPanelCurrentEditSessionContainer) {
-                 interactionPanelCurrentEditSessionContainer.style.display = 'none'; // Hide for new notes
+                 interactionPanelCurrentEditSessionContainer.style.display = 'none'; 
             }
         }
         renderTagPills(); 
@@ -1820,26 +1914,28 @@ document.addEventListener('DOMContentLoaded', () => {
     function renderAllNotesPreviews() { 
         if(!notesListScrollableArea || !noNotesMessagePreviewEl || !allNotesPageTitle) return; 
         notesListScrollableArea.innerHTML = ""; 
-        let notesToDisplay; 
-        if (currentFilterTag) { 
-            allNotesPageTitle.textContent = `Notes tagged: "${currentFilterTag}"`; 
-            notesToDisplay = localNotesCache.filter(note => note.tags && note.tags.some(t => t.name === currentFilterTag)); 
-            if(notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none'; 
-        } else if (isFavoritesViewActive) { 
-            allNotesPageTitle.textContent = "Favorite Notes"; 
-            notesToDisplay = localNotesCache.filter(note => note.isFavorite); 
-            if(notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none'; 
-        } else if (currentlyViewedNotebookId) { 
-            const currentNb = localNotebooksCache.find(nb => nb.id === currentlyViewedNotebookId); 
-            allNotesPageTitle.textContent = `Notes in "${currentNb ? currentNb.title : 'Selected Notebook'}"`; 
-            notesToDisplay = localNotesCache.filter(note => note.notebookId === currentlyViewedNotebookId); 
-            displayNotebookHeader(currentlyViewedNotebookId); 
-        } else { 
-            allNotesPageTitle.textContent = "All Notes"; 
-            notesToDisplay = localNotesCache; 
-            if(notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none'; 
-        } 
-        if (notesToDisplay.length === 0) { 
+        let notesToDisplay = [...localNotesCache]; // Use the current local cache for rendering
+                                                // Filtering logic for currentFilterTag, isFavoritesViewActive, currentlyViewedNotebookId
+                                                // will be applied when setupNotesListenerAndLoadInitialBatch is called.
+        
+        // Update titles based on current context (this logic can be refined or moved if becoming too complex here)
+        if (currentlyViewedNotebookId) {
+            const currentNb = localNotebooksCache.find(nb => nb.id === currentlyViewedNotebookId);
+            if(allNotesPageTitle) allNotesPageTitle.textContent = `Notes in "${currentNb ? currentNb.title : 'Selected Notebook'}"`;
+            if(notebookHeaderDisplay) displayNotebookHeader(currentlyViewedNotebookId);
+        } else if (currentFilterTag) {
+            if(allNotesPageTitle) allNotesPageTitle.textContent = `Notes tagged: "${currentFilterTag}"`;
+            if(notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none';
+        } else if (isFavoritesViewActive) {
+            if(allNotesPageTitle) allNotesPageTitle.textContent = "Favorite Notes";
+            if(notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none';
+        } else {
+            if(allNotesPageTitle) allNotesPageTitle.textContent = "All Notes";
+            if(notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none';
+        }
+
+
+        if (localNotesCache.length === 0 && noMoreNotesToLoad) { // If initial load was empty and no more to fetch
             if (currentFilterTag) noNotesMessagePreviewEl.textContent = `No notes with tag "${currentFilterTag}".`; 
             else if (isFavoritesViewActive) noNotesMessagePreviewEl.textContent = 'No favorite notes.'; 
             else if (currentlyViewedNotebookId) noNotesMessagePreviewEl.textContent = 'No notes in this notebook.'; 
@@ -1850,8 +1946,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return; 
         } 
         noNotesMessagePreviewEl.style.display = 'none'; 
-        const sortedNotes = notesToDisplay.slice().sort((a,b) => (b.modifiedAt?.toMillis?.() || new Date(b.modifiedAt).getTime()) - (a.modifiedAt?.toMillis?.() || new Date(a.modifiedAt).getTime())); 
-        sortedNotes.forEach(note => { 
+        
+        // Sort notesToDisplay (which is localNotesCache) before rendering
+        notesToDisplay.sort((a,b) => (b.modifiedAt?.toMillis?.() || new Date(b.modifiedAt).getTime()) - (a.modifiedAt?.toMillis?.() || new Date(a.modifiedAt).getTime()));
+        
+        notesToDisplay.forEach(note => { 
             const notebook = localNotebooksCache.find(nb => nb.id === note.notebookId); 
             const previewEl = document.createElement('div'); 
             previewEl.className = 'note-preview-card'; 
@@ -1869,7 +1968,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } 
             previewEl.style.backgroundColor = ''; 
             const h4El = document.createElement('h4'); 
-            h4El.className = "font-semibold text-md"; // Removed truncate to allow wrapping
+            h4El.className = "font-semibold text-md"; 
             const pContentEl = document.createElement('p'); 
             pContentEl.className = "text-xs mt-1 note-content-preview"; 
             const pNotebookEl = document.createElement('p'); 
@@ -1906,7 +2005,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let previewHTML = '<em>No content</em>'; 
             if (note.text && note.text.trim() !== "") { 
                 const lines = note.text.split('\n'); 
-                const maxLines = previewEl.classList.contains('grid-card-style') ? 5 : 3; // More lines for grid
+                const maxLines = previewEl.classList.contains('grid-card-style') ? 5 : 3; 
                 const linesToDisplay = lines.slice(0, maxLines); 
                 previewHTML = linesToDisplay.map(line => line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")).join('<br>'); 
                 if (lines.length > maxLines) previewHTML += '...'; 
@@ -1952,6 +2051,14 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             notesListScrollableArea.appendChild(previewEl); 
         }); 
+
+        // Add "End of notes" message if applicable
+        if (noMoreNotesToLoad && localNotesCache.length > 0) {
+            const endMessage = document.createElement('p');
+            endMessage.className = 'text-center text-gray-400 py-4 text-sm';
+            endMessage.textContent = 'End of notes.';
+            notesListScrollableArea.appendChild(endMessage);
+        }
     }
     function renderTagsInSettings() { 
         if(!settingsTagsListContainer || !settingsNoTagsMessage) return; 
@@ -1987,7 +2094,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 isFavoritesViewActive = false; 
                 clearInteractionPanel(true); 
                 switchToMainView('notes'); 
-                renderAllNotesPreviews();
+                setupNotesListenerAndLoadInitialBatch();
             });
             tagCard.querySelector('.edit-tag-icon-btn').addEventListener('click', (e) => { 
                 e.stopPropagation(); 
@@ -2083,7 +2190,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     await updateDoc(parentNotebookRef, { notesCount: (parentNotebookSnap.data().notesCount || 0) + 1 });
                 }
                 // "My edits" section logic is handled in displayNoteInInteractionPanel
-                // after the note is first saved and reloaded.
+                // after the note is first saved and reloaded (via snapshot).
+                // No need to explicitly show it here.
 
             } catch (e) { console.error("Error creating new note:", e); alert("Failed to save new note."); }
         } else if (currentInteractingNoteIdInPanel && existingNoteData) { 
