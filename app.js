@@ -10,7 +10,7 @@ import {
 // Your web app's Firebase configuration
 // ==========================================================================================
 const firebaseConfig = {
-    apiKey: "AIzaSyAY7KNDAumnpPEFQXAJuYeu2Kpw1tkDC30", // Replace with your actual API key if needed
+    apiKey: "AIzaSyAY7KNDAumnpPEFQXAJuYeu2Kpw1tkDC30", // Replace with your actual API key
     authDomain: "ac-notebook-test.firebaseapp.com",
     projectId: "ac-notebook-test",
     storageBucket: "ac-notebook-test.appspot.com", 
@@ -47,7 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
         themeBorderAccent: initialDefaultThemeColors[2],
         appDefaultBackgroundColor: initialDefaultThemeColors[3],
         defaultHomepage: "notebooks",
-        viewMode: "compact" // Added viewMode, default to compact
+        viewMode: "compact" // Default view mode
     };
     
     const initialPaletteColors = ["#a7f3d0", "#6ee7b7", "#34d399", "#10b981", "#059669", "#fde047", "#facc15", "#eab308", "#f3f4f6"]; 
@@ -193,7 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const allNotesPageTitle = document.getElementById('allNotesPageTitle');
     const notebookHeaderDisplay = document.getElementById('notebookHeaderDisplay'); 
-    const notesPreviewColumnOuter = document.getElementById('notesPreviewColumnOuter'); // Added
+    const notesPreviewColumnOuter = document.getElementById('notesPreviewColumnOuter'); 
     const notesListScrollableArea = document.getElementById('notesListScrollableArea'); 
     const noNotesMessagePreviewEl = document.getElementById('noNotesMessage');
     const noteInteractionPanel = document.getElementById('noteInteractionPanel'); 
@@ -286,26 +286,25 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (notesContentDiv.classList.contains('main-view-content-active')) {
             if (themeSettings.viewMode === 'comfortable') {
-                if (!currentInteractingNoteIdInPanel && !isNewNoteSessionInPanel) { // If not actively editing/creating a note
+                if (!currentInteractingNoteIdInPanel && !isNewNoteSessionInPanel) { 
                     notesContentDiv.classList.add('showing-grid');
                     notesContentDiv.classList.remove('showing-editor');
                     if(fabCreateNote) fabCreateNote.classList.remove('hidden');
                     if(fabNavigateBack) fabNavigateBack.classList.add('hidden');
-                } else { // If a note IS active in the panel, ensure editor is shown full page
+                } else { 
                     notesContentDiv.classList.add('showing-editor');
                     notesContentDiv.classList.remove('showing-grid');
                     if(fabCreateNote) fabCreateNote.classList.add('hidden');
                     if(fabNavigateBack) fabNavigateBack.classList.remove('hidden');
                 }
-            } else { // Compact mode
+            } else { 
                 notesContentDiv.classList.remove('showing-grid', 'showing-editor');
-                if(notesPreviewColumnOuter) notesPreviewColumnOuter.style.display = ''; // Reset from potential 'none'
-                if(noteInteractionPanel) noteInteractionPanel.style.display = ''; // Reset
+                if(notesPreviewColumnOuter) notesPreviewColumnOuter.style.display = ''; 
+                if(noteInteractionPanel) noteInteractionPanel.style.display = ''; 
                 if(fabCreateNote) fabCreateNote.classList.remove('hidden');
-                // Back button visibility in compact mode is handled by other logic (e.g., when inside a notebook)
             }
         }
-        renderAllNotesPreviews(); // Re-render notes as their card style might change
+        renderAllNotesPreviews(); 
     }
 
 
@@ -328,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if(notebooksContentDiv) notebooksContentDiv.classList.add("main-view-content-active"); 
         }
         
-        applyCurrentViewMode(); // Apply view mode classes to body
+        applyCurrentViewMode(); 
 
         if (viewName === 'notes') {
             if (themeSettings.viewMode === 'comfortable') {
@@ -337,17 +336,18 @@ document.addEventListener('DOMContentLoaded', () => {
                     notesContentDiv.classList.remove('showing-grid');
                     if(fabCreateNote) fabCreateNote.classList.add('hidden');
                     if(fabNavigateBack) fabNavigateBack.classList.remove('hidden');
-                } else { // Show grid
+                } else { 
                     notesContentDiv.classList.add('showing-grid');
                     notesContentDiv.classList.remove('showing-editor');
                     if(fabCreateNote) fabCreateNote.classList.remove('hidden');
-                    if(fabNavigateBack) fabNavigateBack.classList.add('hidden'); // Hide back button when on main grid
+                    if(fabNavigateBack) fabNavigateBack.classList.add('hidden'); 
                 }
-            } else { // Compact mode
+            } else { 
                 notesContentDiv.classList.remove('showing-grid', 'showing-editor');
-                // Back button visibility for compact mode is handled by notebook context
                 if (!currentlyViewedNotebookId && !currentFilterTag && !isFavoritesViewActive) {
                      if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
+                } else {
+                     if (fabNavigateBack) fabNavigateBack.classList.remove('hidden');
                 }
             }
         } else if (viewName === 'notebooks' || viewName === 'settings' || viewName === 'trash' || viewName === 'favorites') {
@@ -365,8 +365,11 @@ document.addEventListener('DOMContentLoaded', () => {
             renderDeletedNotesList();
             if(fabCreateNote) fabCreateNote.classList.add('hidden');
         } else {
+            // Show create FAB unless in full-page editor in comfortable mode
             if(fabCreateNote && !(notesContentDiv.classList.contains('showing-editor') && themeSettings.viewMode === 'comfortable')) {
                  fabCreateNote.classList.remove('hidden');
+            } else if (fabCreateNote) {
+                 fabCreateNote.classList.add('hidden');
             }
         }
     }
@@ -400,7 +403,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     themeSettings.themeButtonPrimary = settingsData.activeThemeColors?.themeButtonPrimary || initialThemeSettings.themeButtonPrimary;
                     themeSettings.themeBorderAccent = settingsData.activeThemeColors?.themeBorderAccent || initialThemeSettings.themeBorderAccent;
                     themeSettings.defaultHomepage = settingsData.defaultHomepage || initialThemeSettings.defaultHomepage; 
-                    themeSettings.viewMode = settingsData.viewMode || initialThemeSettings.viewMode; // Load viewMode
+                    themeSettings.viewMode = settingsData.viewMode || initialThemeSettings.viewMode; 
                     
                     paletteColors = settingsData.paletteColors || [...initialPaletteColors]; 
                     defaultThemeColorsFromDB = settingsData.defaultThemeColors || [...initialDefaultThemeColors]; 
@@ -415,12 +418,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             defaultThemeColors: [...initialDefaultThemeColors], 
                             paletteColors: [...initialPaletteColors],
                             defaultHomepage: initialThemeSettings.defaultHomepage,
-                            viewMode: initialThemeSettings.viewMode // Save default viewMode
+                            viewMode: initialThemeSettings.viewMode 
                         }); 
                         console.log("Default app settings created in Firestore.");
                     } catch (e) { console.error("Error creating default app settings:", e); }
                 }
-                applyThemeSettings(); 
+                applyThemeSettings(); // This will also call applyCurrentViewMode
                 renderPaletteColors(); 
                 DEFAULT_TAG_COLOR = themeSettings.appDefaultBackgroundColor; 
                 updatePaletteLimitMessage();
@@ -498,27 +501,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (currentInteractingNoteIdInPanel && !isNewNoteSessionInPanel) {
                     const updatedNote = localNotesCache.find(n => n.id === currentInteractingNoteIdInPanel);
                     if (updatedNote) {
-                        // Only update panel fields if they are NOT the active element,
-                        // UNLESS it's specifically the "My edits" field which has its own debounced save.
-                        if(noteTitleInputField_panel && document.activeElement !== noteTitleInputField_panel) {
-                            if (noteTitleInputField_panel.value !== updatedNote.title) noteTitleInputField_panel.value = updatedNote.title;
-                        }
-                        if(noteTextInputField_panel && document.activeElement !== noteTextInputField_panel) {
-                             if (noteTextInputField_panel.value !== updatedNote.text) noteTextInputField_panel.value = updatedNote.text;
-                        }
+                        // Preserve "My edits" field if it's an autosave of the currently edited note's main content
+                        const currentEditDesc = interactionPanelEditsMadeInputField ? interactionPanelEditsMadeInputField.value : null;
                         
-                        const newTagsValue = (updatedNote.tags || []).map(tagObj => tagObj.name);
-                        if (document.activeElement !== noteTagsInputField_panel && JSON.stringify(currentNoteTagsArrayInPanel.sort()) !== JSON.stringify(newTagsValue.sort())) {
-                            currentNoteTagsArrayInPanel = newTagsValue;
-                            renderTagPills();
-                        }
+                        displayNoteInInteractionPanel(currentInteractingNoteIdInPanel, false); // Reload note data
                         
-                        if(interactionPanelActivityInputField && (isAdminModeEnabled || activelyCreatingNoteId === updatedNote.id)) { 
-                            if(document.activeElement !== interactionPanelActivityInputField) {
-                                if(interactionPanelActivityInputField.value !== (updatedNote.activity || '')) interactionPanelActivityInputField.value = updatedNote.activity || '';
+                        // Restore "My edits" field content if it was the same note being updated
+                        if (interactionPanelEditsMadeInputField && currentEditDesc !== null && currentInteractingNoteIdInPanel === updatedNote.id) {
+                            // Only restore if the panel is still showing the "My Edits" section for this note
+                            // This check is important because displayNoteInInteractionPanel might hide it based on its own logic
+                            if (interactionPanelCurrentEditSessionContainer && interactionPanelCurrentEditSessionContainer.style.display === 'block') {
+                                interactionPanelEditsMadeInputField.value = currentEditDesc;
                             }
                         }
-                        updateNoteInfoPanel(updatedNote); 
                     } else if (isCurrentNoteModifiedBySnapshot) { 
                         clearInteractionPanel();
                     }
@@ -635,17 +630,14 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function handleNavigateBackToNotebooks() {
         if (themeSettings.viewMode === 'comfortable' && notesContentDiv.classList.contains('showing-editor')) {
-            // From full-page editor (comfortable) back to notes grid
             notesContentDiv.classList.remove('showing-editor');
             notesContentDiv.classList.add('showing-grid');
             if(fabCreateNote) fabCreateNote.classList.remove('hidden');
             if(fabNavigateBack) fabNavigateBack.classList.add('hidden');
-            clearInteractionPanel(true); // Save/clear "My edits" and clear panel
-             // Ensure the main notes list is rendered correctly for comfortable grid view
-            renderAllNotesPreviews();
-        } else {
-            // Default back to notebooks page (e.g., from compact view's notebook notes list)
-            if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
+            clearInteractionPanel(true); 
+            renderAllNotesPreviews(); 
+        } else if (currentlyViewedNotebookId) { // If in a specific notebook's notes (compact or comfortable grid)
+             if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
             isFavoritesViewActive = false; 
             currentFilterTag = null; 
             currentlyViewedNotebookId = null; 
@@ -696,19 +688,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 isFavoritesViewActive = false; currentFilterTag = null;
                 
                 clearInteractionPanel(true); 
-                switchToMainView('notes'); // This will apply view mode
+                switchToMainView('notes'); 
                 
                 if (themeSettings.viewMode === 'comfortable') {
-                    notesContentDiv.classList.remove('showing-grid'); // Ensure grid is hidden
-                    notesContentDiv.classList.add('showing-editor'); // Show editor full page
-                    if(fabCreateNote) fabCreateNote.classList.add('hidden');
+                    notesContentDiv.classList.add('showing-grid'); // Show grid for this notebook
+                    notesContentDiv.classList.remove('showing-editor');
+                    if(fabCreateNote) fabCreateNote.classList.remove('hidden'); // Show create for this notebook's grid
                 }
                 if (fabNavigateBack) fabNavigateBack.classList.remove('hidden'); 
 
                 displayNotebookHeader(notebookId); 
-                renderAllNotesPreviews(); // This will render notes for the selected notebook
-                // If in compact mode, displayNoteInInteractionPanel will be called by note click
-                // If in comfortable mode, we might want to auto-select the first note or show placeholder
+                renderAllNotesPreviews(); 
             });
 
             card.querySelector('.edit-notebook-icon-btn').addEventListener('click', (e) => {
@@ -769,7 +759,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (viewModeCompactRadio) viewModeCompactRadio.checked = themeSettings.viewMode === 'compact';
         if (viewModeComfortableRadio) viewModeComfortableRadio.checked = themeSettings.viewMode === 'comfortable';
 
-        applyCurrentViewMode(); // Apply body classes and re-render if needed
+        applyCurrentViewMode(); 
 
         renderAllNotesPreviews(); 
         renderTagsInSettings(); 
@@ -816,7 +806,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    // View Mode Radio Button Listeners
     if(viewModeCompactRadio) {
         viewModeCompactRadio.addEventListener('change', async () => {
             if (viewModeCompactRadio.checked) {
@@ -824,9 +813,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     await setDoc(doc(db, "app_settings", "global"), { viewMode: 'compact' }, { merge: true });
                     applyCurrentViewMode();
-                    // If currently on notes page, might need to re-evaluate layout
                     if (notesContentDiv.classList.contains('main-view-content-active')) {
-                        switchToMainView('notes'); // Re-trigger view logic
+                        switchToMainView('notes'); 
                     }
                 } catch (e) { console.error("Error saving view mode:", e); }
             }
@@ -865,7 +853,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     defaultThemeColors: [...initialDefaultThemeColors], 
                     paletteColors: [...initialPaletteColors], 
                     defaultHomepage: initialThemeSettings.defaultHomepage,
-                    viewMode: initialThemeSettings.viewMode // Reset view mode too
+                    viewMode: initialThemeSettings.viewMode 
                 });
                 console.log("Reset theme command sent to Firestore successfully.");
             } catch (e) {
@@ -1372,9 +1360,9 @@ document.addEventListener('DOMContentLoaded', () => {
     async function saveCurrentEditDescription() {
         if (!interactionPanelEditsMadeInputField || 
             !currentInteractingNoteIdInPanel || 
-            isNewNoteSessionInPanel || // Don't save if it's still a "new note session" (before first main content save)
+            isNewNoteSessionInPanel || 
             !currentInteractingNoteOriginalNotebookId ||
-            !currentEditSessionOpenTimePanel) { // Only save if an "My edits" session was properly initiated
+            !currentEditSessionOpenTimePanel) { // Check if an edit session was actually started
             return; 
         }
     
@@ -1396,7 +1384,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (currentEditSessionEntryId) { 
                         existingEdits = existingEdits.filter(edit => edit.id !== currentEditSessionEntryId);
                         currentEditSessionEntryId = null; 
-                        // currentEditSessionOpenTimePanel = null; // Keep this to know the section was opened, but no active entry
+                        // Keep currentEditSessionOpenTimePanel; if user types again in this "main edit" session, a new log starts
                         entryModified = true;
                     }
                 } else { 
@@ -1513,7 +1501,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentInteractingNoteOriginalNotebookId = noteToEdit.notebookId; 
         currentOpenNotebookIdForPanel = noteToEdit.notebookId; 
         
-        if (previousInteractingNoteId !== noteId) { // Only reset if it's a truly different note
+        if (previousInteractingNoteId !== noteId) {
             currentEditSessionOpenTimePanel = null; 
             currentEditSessionEntryId = null; 
             if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
@@ -1552,18 +1540,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (oldListener) {
                 noteTextInputField_panel.removeEventListener('input', oldListener);
             }
-            // Only add listener if the "My edits" section is not already part of an active session for this note
-            // or if it's a different note being loaded.
             if (previousInteractingNoteId !== noteId || !currentEditSessionOpenTimePanel) {
                  if(interactionPanelCurrentEditSessionContainer && interactionPanelCurrentEditSessionContainer.style.display === 'none'){
                     noteTextInputField_panel.addEventListener('input', handleFirstMainEdit, { once: true });
                     noteTextInputField_panel._handleFirstMainEditListener = handleFirstMainEdit;
-                 } else if (interactionPanelCurrentEditSessionContainer && interactionPanelCurrentEditSessionContainer.style.display === 'block' && !currentEditSessionOpenTimePanel) {
-                    // If section is visible but no session time, it means we re-loaded same note, start session time
+                 } else if (interactionPanelCurrentEditSessionContainer && interactionPanelCurrentEditSessionContainer.style.display === 'block' && !currentEditSessionOpenTimePanel && !isNewNoteSessionInPanel) {
+                    // If same note, "My Edits" section is visible, but no session time (e.g., re-rendered by snapshot), start session
                     currentEditSessionOpenTimePanel = new Date();
                  }
-            } else if (interactionPanelCurrentEditSessionContainer && currentEditSessionOpenTimePanel) {
-                 // If same note and session already started, ensure "My edits" is visible
+            } else if (interactionPanelCurrentEditSessionContainer && currentEditSessionOpenTimePanel && !isNewNoteSessionInPanel) {
                  interactionPanelCurrentEditSessionContainer.style.display = 'block';
             }
         }
@@ -1667,15 +1652,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const currentPreviewEl = document.querySelector(`.note-preview-card[data-note-id="${noteId}"]`);
         if (currentPreviewEl) {
-            currentPreviewEl.style.backgroundColor = ''; 
-            const h4Selected = currentPreviewEl.querySelector('h4');
-            const pContentSelected = currentPreviewEl.querySelector('.note-content-preview');
-            const pNotebookSelected = currentPreviewEl.querySelector('.note-preview-notebook-name');
-            if(h4Selected) h4Selected.style.color = '';
-            if(pContentSelected) pContentSelected.style.color = '';
-            if(pNotebookSelected) pNotebookSelected.style.color = '';
+            if (themeSettings.viewMode === 'compact') { // Only apply .selected styling in compact view
+                currentPreviewEl.style.backgroundColor = ''; 
+                const h4Selected = currentPreviewEl.querySelector('h4');
+                const pContentSelected = currentPreviewEl.querySelector('.note-content-preview');
+                const pNotebookSelected = currentPreviewEl.querySelector('.note-preview-notebook-name');
+                if(h4Selected) h4Selected.style.color = '';
+                if(pContentSelected) pContentSelected.style.color = '';
+                if(pNotebookSelected) pNotebookSelected.style.color = '';
+                currentPreviewEl.classList.add('selected'); 
+            } else {
+                 currentPreviewEl.classList.remove('selected'); // Ensure not selected in comfortable grid
+            }
 
-            currentPreviewEl.classList.add('selected'); 
 
             const favoriteIconSelected = currentPreviewEl.querySelector('.favorite-star i');
             const deleteIconSelected = currentPreviewEl.querySelector('.delete-note-icon i');
@@ -1684,14 +1673,20 @@ document.addEventListener('DOMContentLoaded', () => {
             if (favStarDivSelected && favoriteIconSelected) {
                 favStarDivSelected.classList.toggle('is-favorite', noteToEdit.isFavorite || false);
                 favoriteIconSelected.className = noteToEdit.isFavorite ? 'fas fa-star' : 'far fa-star';
-                favoriteIconSelected.style.color = noteToEdit.isFavorite ? '#FBBF24' : '#FFFFFF';
+                if (previewEl.classList.contains('selected')) { // If compact and selected
+                     favoriteIconSelected.style.color = noteToEdit.isFavorite ? '#FBBF24' : '#FFFFFF';
+                } else {
+                     favoriteIconSelected.style.color = noteToEdit.isFavorite ? '#FBBF24' : '#a0aec0';
+                }
             }
             if (deleteIconSelected) {
-                deleteIconSelected.style.color = '#f87171'; 
+                deleteIconSelected.style.color = previewEl.classList.contains('selected') ? '#f87171' : '#ef4444'; 
             }
 
             lastSelectedNotePreviewElement = currentPreviewEl;
-            currentPreviewEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            if (themeSettings.viewMode === 'compact') { // Only scroll into view for compact mode
+                currentPreviewEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
         }
     }
     async function processInteractionPanelEditsOnDeselect(isSwitchingContext = false) { 
@@ -1824,8 +1819,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const notebook = localNotebooksCache.find(nb => nb.id === note.notebookId); 
             const previewEl = document.createElement('div'); 
             previewEl.className = 'note-preview-card'; 
-            if (themeSettings.viewMode === 'comfortable') {
-                previewEl.classList.add('grid-card-style'); // Add class for grid styling
+            if (themeSettings.viewMode === 'comfortable' && notesContentDiv.classList.contains('showing-grid')) {
+                previewEl.classList.add('grid-card-style'); 
             } else {
                 previewEl.classList.remove('grid-card-style');
             }
@@ -1857,7 +1852,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const favoriteIcon = document.createElement('i'); 
             favoriteIcon.className = note.isFavorite ? 'fas fa-star' : 'far fa-star';
             
-            if (isCurrentlyTheInteractingNote && themeSettings.viewMode === 'compact') { // Only apply .selected in compact view
+            if (isCurrentlyTheInteractingNote && themeSettings.viewMode === 'compact') { 
                 previewEl.classList.add('selected'); 
                 favoriteIcon.style.color = note.isFavorite ? '#FBBF24' : '#FFFFFF'; 
                 deleteIcon.style.color = '#f87171'; 
@@ -1899,9 +1894,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (e.target.closest('.favorite-star') || e.target.closest('.delete-note-icon')) return; 
                 
                 if (themeSettings.viewMode === 'comfortable') {
-                    switchToMainView('notes', 'openNote'); // Special context for comfortable view
+                    switchToMainView('notes', 'openNote'); 
                     displayNoteInInteractionPanel(note.id);
-                } else { // Compact mode
+                } else { 
                     displayNoteInInteractionPanel(note.id); 
                 }
             }); 
@@ -2051,20 +2046,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (parentNotebookSnap.exists()) {
                     await updateDoc(parentNotebookRef, { notesCount: (parentNotebookSnap.data().notesCount || 0) + 1 });
                 }
-                // After first save, attach listener to show "My edits" on next main content edit
-                if(noteTextInputField_panel && interactionPanelCurrentEditSessionContainer) {
-                    const handleFirstMainEditAfterSave = () => {
-                        if (currentInteractingNoteIdInPanel === docRef.id) { 
-                           interactionPanelCurrentEditSessionContainer.style.display = 'block';
-                           currentEditSessionOpenTimePanel = new Date(); 
-                           currentEditSessionEntryId = null; // New session starts
-                           if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = '';
-                        }
-                    };
-                    noteTextInputField_panel.removeEventListener('input', handleFirstMainEditAfterSave); 
-                    noteTextInputField_panel.addEventListener('input', handleFirstMainEditAfterSave, { once: true });
-                    noteTextInputField_panel._handleFirstMainEditListener = handleFirstMainEditAfterSave; // Store for potential removal
-                }
+                // "My edits" section will be shown on next interaction with main text via displayNoteInInteractionPanel's listener
+                // if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'block'; // Now handled by displayNoteInInteractionPanel
 
 
             } catch (e) { console.error("Error creating new note:", e); alert("Failed to save new note."); }
@@ -2225,13 +2208,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (fabCreateNote) {
         fabCreateNote.addEventListener('click', async () => {
             let targetNotebookId, targetNotebookName;
-            if (currentlyViewedNotebookId && !isFavoritesViewActive && !currentFilterTag && themeSettings.viewMode === 'compact') { 
-                const currentNb = localNotebooksCache.find(nb => nb.id === currentlyViewedNotebookId);
-                if (currentNb) { targetNotebookId = currentNb.id; targetNotebookName = currentNb.title; }
-            } else { 
+            
+            if (themeSettings.viewMode === 'comfortable' || !currentlyViewedNotebookId) {
+                // In comfortable mode, or if no notebook is currently selected in compact, use default or first notebook
                 const defaultNotebookForCreation = localNotebooksCache.find(nb => nb.title === "My Notes 😏") || (localNotebooksCache.length > 0 ? localNotebooksCache[0] : null);
-                if (defaultNotebookForCreation) { targetNotebookId = defaultNotebookForCreation.id; targetNotebookName = defaultNotebookForCreation.title; } 
+                if (defaultNotebookForCreation) { 
+                    targetNotebookId = defaultNotebookForCreation.id; 
+                    targetNotebookName = defaultNotebookForCreation.title; 
+                }
+            } else if (currentlyViewedNotebookId && themeSettings.viewMode === 'compact') { 
+                // In compact mode and a notebook is selected, use that one
+                const currentNb = localNotebooksCache.find(nb => nb.id === currentlyViewedNotebookId);
+                if (currentNb) { 
+                    targetNotebookId = currentNb.id; 
+                    targetNotebookName = currentNb.title; 
+                }
             }
+
 
             if (!targetNotebookId && localNotebooksCache.length > 0) { 
                 targetNotebookId = localNotebooksCache[0].id;
@@ -2245,11 +2238,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             if (!notesContentDiv.classList.contains('main-view-content-active')) {
-                switchToMainView('notes'); // This will apply view mode
+                switchToMainView('notes'); 
             }
-
+            
             if (themeSettings.viewMode === 'comfortable') {
-                switchToMainView('notes', 'newNoteComfortable');
+                switchToMainView('notes', 'newNoteComfortable'); // Signal to open full editor
             }
             
             setupPanelForNewNote(targetNotebookId, targetNotebookName);
