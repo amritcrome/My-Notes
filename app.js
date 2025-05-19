@@ -424,7 +424,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         modifiedAt: data.modifiedAt?.toDate ? data.modifiedAt.toDate() : (data.modifiedAt ? new Date(data.modifiedAt) : new Date()),
                         edits: (data.edits || []).map(edit => ({ 
                             ...edit, 
-                            id: edit.id || doc(collection(db, '_')).id, // Ensure old edits have an ID
+                            id: edit.id || doc(collection(db, '_')).id, 
                             timestamp: edit.timestamp?.toDate ? edit.timestamp.toDate() : (edit.timestamp ? new Date(edit.timestamp) : new Date()) 
                         }))
                     });
@@ -433,23 +433,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 renderAllNotesPreviews(); 
                 if (settingsContentDiv && settingsContentDiv.classList.contains('main-view-content-active') && document.getElementById('tags-settings-section')?.classList.contains('settings-content-section-active')) { renderTagsInSettings(); }
                 
-                if (currentInteractingNoteIdInPanel && !isNewNoteSessionInPanel && activelyCreatingNoteId !== currentInteractingNoteIdInPanel) { 
+                // Check if the currently edited note was updated by this snapshot
+                if (currentInteractingNoteIdInPanel && !isNewNoteSessionInPanel && 
+                    querySnapshot.docChanges().some(change => change.type === "modified" && change.doc.id === currentInteractingNoteIdInPanel)) {
+                    
                     const updatedNote = localNotesCache.find(n => n.id === currentInteractingNoteIdInPanel);
                     if (updatedNote) {
-                        displayNoteInInteractionPanel(currentInteractingNoteIdInPanel, false); 
-                    } else {
-                        clearInteractionPanel(); 
-                    }
-                } else if (activelyCreatingNoteId && currentInteractingNoteIdInPanel === activelyCreatingNoteId) {
-                    const updatedNote = localNotesCache.find(n => n.id === activelyCreatingNoteId);
-                    if (updatedNote) {
-                        lastSavedNoteTitleInPanel = updatedNote.title;
-                        lastSavedNoteTextInPanel = updatedNote.text;
-                        lastSavedNoteTagsInPanel = (updatedNote.tags || []).map(t => t.name).sort().join(',');
-                        lastSavedNoteActivityInPanel = updatedNote.activity || '';
-
-                        if(noteTitleInputField_panel && document.activeElement !== noteTitleInputField_panel) noteTitleInputField_panel.value = updatedNote.title;
-                        if(noteTextInputField_panel && document.activeElement !== noteTextInputField_panel) noteTextInputField_panel.value = updatedNote.text;
+                        // Preserve "My edits" field if it's an autosave of the currently edited note's main content
+                        // The saveCurrentEditDescription function handles its own Firestore updates for the "My edits" field.
+                        // So, we only update the main fields if they are not focused.
+                        if(noteTitleInputField_panel && document.activeElement !== noteTitleInputField_panel) {
+                            if (noteTitleInputField_panel.value !== updatedNote.title) noteTitleInputField_panel.value = updatedNote.title;
+                        }
+                        if(noteTextInputField_panel && document.activeElement !== noteTextInputField_panel) {
+                             if (noteTextInputField_panel.value !== updatedNote.text) noteTextInputField_panel.value = updatedNote.text;
+                        }
                         
                         const newTagsValue = (updatedNote.tags || []).map(tagObj => tagObj.name);
                         if (document.activeElement !== noteTagsInputField_panel && JSON.stringify(currentNoteTagsArrayInPanel.sort()) !== JSON.stringify(newTagsValue.sort())) {
@@ -458,10 +456,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         
                         if(interactionPanelActivityInputField && (isAdminModeEnabled || activelyCreatingNoteId === updatedNote.id || isNewNoteSessionInPanel)) { 
-                            if(document.activeElement !== interactionPanelActivityInputField) interactionPanelActivityInputField.value = updatedNote.activity || '';
+                            if(document.activeElement !== interactionPanelActivityInputField) {
+                                if(interactionPanelActivityInputField.value !== (updatedNote.activity || '')) interactionPanelActivityInputField.value = updatedNote.activity || '';
+                            }
                         }
                         updateNoteInfoPanel(updatedNote); 
                     }
+                } else if (currentInteractingNoteIdInPanel && !isNewNoteSessionInPanel && !localNotesCache.some(n => n.id === currentInteractingNoteIdInPanel)) {
+                    // The currently edited note was deleted from another client or context
+                    clearInteractionPanel();
                 }
                 hideLoadingOverlay(); 
             }, (error) => { 
@@ -1266,28 +1269,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 let existingEdits = noteData.edits || [];
                 let entryModified = false;
     
-                if (editsDescription === "") { // User cleared or left the field empty
-                    if (currentEditSessionEntryId) { // If there was an active edit session, remove its entry
+                if (editsDescription === "") { 
+                    if (currentEditSessionEntryId) { 
                         existingEdits = existingEdits.filter(edit => edit.id !== currentEditSessionEntryId);
-                        currentEditSessionEntryId = null;
+                        currentEditSessionEntryId = null; 
                         currentEditSessionOpenTimePanel = null; 
                         entryModified = true;
                     }
-                    // If no currentEditSessionEntryId and description is empty, do nothing
-                } else { // There is a description
-                    if (currentEditSessionEntryId) { // Update existing session entry
+                } else { 
+                    if (currentEditSessionEntryId) { 
                         let entryFound = false;
                         existingEdits = existingEdits.map(edit => {
                             if (edit.id === currentEditSessionEntryId) {
                                 entryFound = true;
-                                // Update description, keep original session timestamp (currentEditSessionOpenTimePanel)
                                 return { ...edit, description: editsDescription, timestamp: Timestamp.fromDate(currentEditSessionOpenTimePanel) };
                             }
                             return edit;
                         });
-                        if (!entryFound) { // Should not happen if currentEditSessionEntryId is set, but as a fallback, create new
-                            currentEditSessionEntryId = doc(collection(db, '_')).id; // Generate new ID
-                            if (!currentEditSessionOpenTimePanel) currentEditSessionOpenTimePanel = new Date(); // Ensure timestamp
+                        if (!entryFound) { // Fallback: if ID was set but not found, treat as new (should be rare)
+                            currentEditSessionEntryId = doc(collection(db, '_placeholder')).id;
+                            if (!currentEditSessionOpenTimePanel) currentEditSessionOpenTimePanel = new Date();
                             existingEdits.push({ 
                                 id: currentEditSessionEntryId,
                                 timestamp: Timestamp.fromDate(currentEditSessionOpenTimePanel), 
@@ -1295,9 +1296,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             });
                         }
                         entryModified = true;
-                    } else { // No current session ID, create a new entry for this session
+                    } else { // No current session ID, create a new entry
                         if (!currentEditSessionOpenTimePanel) currentEditSessionOpenTimePanel = new Date(); // Should have been set when section became visible
-                        currentEditSessionEntryId = doc(collection(db, '_')).id; // Generate new ID
+                        currentEditSessionEntryId = doc(collection(db, '_placeholder')).id; 
                         existingEdits.push({ 
                             id: currentEditSessionEntryId,
                             timestamp: Timestamp.fromDate(currentEditSessionOpenTimePanel), 
@@ -1378,6 +1379,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function displayNoteInInteractionPanel(noteId, forceFocusToTitle = true) { 
+        const previousInteractingNoteId = currentInteractingNoteIdInPanel;
         if ((currentInteractingNoteIdInPanel && currentInteractingNoteIdInPanel !== noteId) || isNewNoteSessionInPanel ) {
             processInteractionPanelEditsOnDeselect(true); 
         }
@@ -1389,10 +1391,15 @@ document.addEventListener('DOMContentLoaded', () => {
         currentInteractingNoteIdInPanel = noteId; 
         currentInteractingNoteOriginalNotebookId = noteToEdit.notebookId; 
         currentOpenNotebookIdForPanel = noteToEdit.notebookId; 
-        currentEditSessionOpenTimePanel = null; 
-        currentEditSessionEntryId = null; 
-        if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
-        if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'none'; // Hide initially
+        
+        // Only reset edit session if it's a different note being loaded
+        if (previousInteractingNoteId !== noteId) {
+            currentEditSessionOpenTimePanel = null; 
+            currentEditSessionEntryId = null; 
+            if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
+            if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'none'; 
+        }
+
 
         lastSavedNoteTitleInPanel = noteToEdit.title || "";
         lastSavedNoteTextInPanel = noteToEdit.text || "";
@@ -1411,16 +1418,21 @@ document.addEventListener('DOMContentLoaded', () => {
              if (document.activeElement !== noteTextInputField_panel) { 
                 if (noteTextInputField_panel.value !== newText) noteTextInputField_panel.value = newText;
             }
-            // Add one-time listener to show "My edits" section
+            // Add one-time listener to show "My edits" section if it's not already visible for this session
             const handleFirstMainEdit = () => {
-                if (currentInteractingNoteIdInPanel === noteId && !isNewNoteSessionInPanel) { // Ensure it's for the current note
+                if (currentInteractingNoteIdInPanel === noteId && !isNewNoteSessionInPanel && !currentEditSessionOpenTimePanel) { 
                     if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'block';
-                    currentEditSessionOpenTimePanel = new Date(); // Set session start time
-                    // currentEditSessionEntryId will be set when user types in "My edits"
+                    currentEditSessionOpenTimePanel = new Date(); 
                 }
             };
-            noteTextInputField_panel.removeEventListener('input', handleFirstMainEdit); // Remove any old listener
-            noteTextInputField_panel.addEventListener('input', handleFirstMainEdit, { once: true });
+            // Only add listener if the "My edits" section is not already part of an active session for this note
+            if (!currentEditSessionOpenTimePanel && interactionPanelCurrentEditSessionContainer && interactionPanelCurrentEditSessionContainer.style.display === 'none') {
+                noteTextInputField_panel.removeEventListener('input', handleFirstMainEdit); 
+                noteTextInputField_panel.addEventListener('input', handleFirstMainEdit, { once: true });
+            } else if (currentInteractingNoteIdInPanel === noteId && !isNewNoteSessionInPanel && interactionPanelCurrentEditSessionContainer) {
+                 // If it's the same note and session might exist, ensure it's visible
+                interactionPanelCurrentEditSessionContainer.style.display = 'block';
+            }
         }
         renderTagPills(); 
         
@@ -1466,7 +1478,7 @@ document.addEventListener('DOMContentLoaded', () => {
             noteTitleInputField_panel.focus();
         }
 
-        if (lastSelectedNotePreviewElement) {
+        if (lastSelectedNotePreviewElement && lastSelectedNotePreviewElement.dataset.noteId !== noteId) { // Only if different note
             const deselectedNoteId = lastSelectedNotePreviewElement.dataset.noteId;
             const deselectedNoteData = localNotesCache.find(n => n.id === deselectedNoteId);
 
@@ -1557,6 +1569,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentEditSessionEntryId = null;
         currentEditSessionOpenTimePanel = null;
         if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
+        if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'none';
         
         let noteBeingProcessedId = currentInteractingNoteIdInPanel || activelyCreatingNoteId; 
         if (isNewNoteSessionInPanel && !noteBeingProcessedId) { 
@@ -1893,15 +1906,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (parentNotebookSnap.exists()) {
                     await updateDoc(parentNotebookRef, { notesCount: (parentNotebookSnap.data().notesCount || 0) + 1 });
                 }
-                // After first save, "My edits" can be shown if user edits main text
-                if(interactionPanelCurrentEditSessionContainer && noteTextInputField_panel) {
+                // After first save, attach listener to show "My edits" on next main content edit
+                if(noteTextInputField_panel && interactionPanelCurrentEditSessionContainer) {
                     const handleFirstMainEditAfterSave = () => {
-                        if (currentInteractingNoteIdInPanel === docRef.id) { // Ensure it's for this newly saved note
+                        if (currentInteractingNoteIdInPanel === docRef.id) { 
                            interactionPanelCurrentEditSessionContainer.style.display = 'block';
                            currentEditSessionOpenTimePanel = new Date(); 
                         }
                     };
-                    noteTextInputField_panel.removeEventListener('input', handleFirstMainEditAfterSave); // Clean up if any old one exists (unlikely here)
+                    noteTextInputField_panel.removeEventListener('input', handleFirstMainEditAfterSave); 
                     noteTextInputField_panel.addEventListener('input', handleFirstMainEditAfterSave, { once: true });
                 }
 
@@ -2503,7 +2516,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         activity: noteData.activity || "",
                         isFavorite: noteData.isFavorite || false,
                         edits: (noteData.edits || []).map(edit => ({
-                            id: edit.id || null, // Include edit ID if it exists
+                            id: edit.id || null, 
                             timestamp: convertTimestampToISO(edit.timestamp),
                             description: edit.description || ""
                         }))
