@@ -86,7 +86,7 @@ body {
 .settings-content-section-active { display: block; } 
 
 .note-preview-card {
-    padding: 0.75rem 1rem;
+    padding: 1rem; /* Increased padding for better spacing */
     border-radius: 0.375rem;
     border: 1px solid #e5e7eb; 
     margin-bottom: 0.5rem;
@@ -96,29 +96,41 @@ body {
     overflow-wrap: break-word; 
     color: var(--theme-text-on-light); 
     position: relative; 
-    min-height: 120px; 
-    display: flex; /* Added for better internal alignment if needed */
-    flex-direction: column; /* Added */
-    justify-content: space-between; /* Added */
+    display: flex; 
+    flex-direction: column; 
+    justify-content: space-between; 
 }
+.note-preview-card.grid-card-style { /* Specific style for comfortable view grid cards */
+    min-height: 180px; /* Increased min-height for grid view */
+    height: auto; /* Allow height to grow with content */
+}
+.note-preview-card:not(.grid-card-style) { /* Styles for compact list view cards */
+    min-height: 120px;
+}
+
 .note-preview-card h4 {
     color: var(--theme-text-on-light); 
     font-weight: 600;
-    margin-bottom: 0.25rem; /* Add some space below title */
+    margin-bottom: 0.5rem; /* Space below title */
+    line-height: 1.3; /* Adjust for better title readability */
+    /* Allow title to wrap if very long */
+    white-space: normal; 
+    overflow-wrap: break-word;
+    word-break: break-word; 
 }
 .note-preview-card .note-content-preview {
     color: var(--theme-text-on-light); 
-    margin-bottom: 1.5rem; 
-    flex-grow: 1; /* Allow preview to take up space */
+    flex-grow: 1; 
+    margin-bottom: 0.75rem; /* Space above notebook name/actions */
+    max-height: 6em; /* Approx 4-5 lines, adjust as needed */
+    line-height: 1.4em;
+    overflow: hidden;
 }
 .note-preview-card .note-preview-notebook-name {
     color: #6b7280; 
-    /* position: absolute;  Removed for normal flow */
-    /* bottom: 0.5rem; Removed */
-    /* left: 0.75rem; Removed */
     font-size: 0.75rem;
-    margin-top: auto; /* Push to bottom if card is taller */
-    padding-top: 0.5rem; /* Space above notebook name */
+    margin-top: auto; 
+    padding-top: 0.5rem; 
 }
 
 .deleted-note-card {
@@ -181,7 +193,7 @@ body {
 .note-preview-card:hover, .deleted-note-card:hover {
     box-shadow: 0 2px 8px rgba(0,0,0,0.07);
 }
-.note-preview-card.selected { /* Style for compact view selected note */
+.note-preview-card.selected { 
     background-color: #000000 !important; 
     border-left-width: 4px;
     border-left-color: var(--theme-border-accent); 
@@ -194,25 +206,21 @@ body {
 }
 
 
-.note-content-preview { 
-    max-height: 3.9em; 
-    line-height: 1.3em;
-    overflow: hidden; 
-}
 .note-actions-container { 
-    /* position: absolute; Modified: only absolute for non-grid */
     bottom: 0.5rem;
     right: 0.5rem;
     display: flex;
     gap: 0.25rem; 
+    align-self: flex-end; /* Align to the end of the card's flex direction */
+    margin-top: 0.5rem; /* Add some space if it's after content */
 }
 .note-preview-card:not(.grid-card-style) .note-actions-container {
-    position: absolute; /* Keep absolute for list view */
+    position: absolute; 
 }
 .note-preview-card.grid-card-style .note-actions-container {
-    position: relative; /* Static for grid view, align to bottom of card content */
-    margin-top: 0.5rem;
-    justify-content: flex-end;
+    position: relative; 
+    bottom: auto; /* Reset for grid flow */
+    right: auto; /* Reset for grid flow */
 }
 
 
@@ -260,25 +268,7 @@ body {
     display: flex;
     flex-grow: 1; 
     min-height: 0; 
-    position: relative; /* For absolute positioning of full-page editor */
-}
-@media (min-width: 768px) { 
-    .all-notes-container {
-        flex-direction: row;
-    }
-}
-@media (max-width: 767px) { 
-    .all-notes-container {
-        flex-direction: column;
-    }
-    #notesPreviewColumnOuter { 
-       height: 15rem; 
-       flex-shrink: 0; 
-    }
-    #noteInteractionPanel { 
-        flex-grow: 1;
-        min-height: 0; 
-    }
+    position: relative; 
 }
 
 /* Compact View (Default) */
@@ -312,36 +302,50 @@ body.view-mode-comfortable #notes-content.showing-grid #notesPreviewColumnOuter 
 }
 body.view-mode-comfortable #notes-content.showing-grid #notesListScrollableArea {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); /* Adjust minmax for card size */
     gap: 1rem;
     padding: 1rem; 
+    /* Default to 1 column for small screens */
+    grid-template-columns: repeat(1, 1fr); 
 }
+/* Medium screens (tablets) - 2 columns */
+@media (min-width: 640px) { /* sm: Tailwind breakpoint */
+    body.view-mode-comfortable #notes-content.showing-grid #notesListScrollableArea {
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); /* Slightly larger min for 2 columns */
+    }
+}
+/* Large screens (desktops) - 3 or more columns */
+@media (min-width: 1024px) { /* lg: Tailwind breakpoint */
+    body.view-mode-comfortable #notes-content.showing-grid #notesListScrollableArea {
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); /* Adjust minmax for desired card size */
+    }
+}
+
 body.view-mode-comfortable #notes-content.showing-grid .note-preview-card {
-    margin-bottom: 0; /* Grid gap handles spacing */
-    min-height: 150px; /* Adjust card height for grid */
+    margin-bottom: 0; 
+    min-height: 200px; /* Increased min-height for grid view cards */
 }
 body.view-mode-comfortable #notes-content.showing-grid #noteInteractionPanel {
-    display: none; /* Hide editor in grid view */
+    display: none; 
 }
 
 /* Full Page Editor in Comfortable View */
 body.view-mode-comfortable #notes-content.showing-editor #notesPreviewColumnOuter {
-    display: none; /* Hide note list/grid */
+    display: none; 
 }
 body.view-mode-comfortable #notes-content.showing-editor #noteInteractionPanel {
-    display: flex; /* Ensure it's flex for internal layout */
+    display: flex; 
     flex-basis: 100%;
     width: 100%;
     height: 100%;
-    position: absolute; /* Or manage via parent flex if preferred */
+    position: absolute; 
     top: 0;
     left: 0;
-    background-color: white; /* Ensure it covers content behind */
-    z-index: 45; /* Above notes list, below modals */
-    padding: 1rem; /* Consistent padding */
+    background-color: white; 
+    z-index: 45; 
+    padding: 1rem; 
 }
 body.view-mode-comfortable #notes-content.showing-editor #noteInteractionFormContainer {
-    padding-top: 0; /* Remove padding from form container as panel has it now */
+    padding-top: 0; 
 }
 
 
@@ -360,12 +364,6 @@ body.view-mode-comfortable #notes-content.showing-editor #noteInteractionFormCon
        padding-left: 0;
        margin-top: 0.75rem; 
     }
-
-    /* Comfortable View Mobile - Grid might become single column by default due to minmax */
-    body.view-mode-comfortable #notes-content.showing-grid #notesListScrollableArea {
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); /* Smaller cards on mobile */
-    }
-    /* Full page editor on mobile in comfortable view is inherently full page */
 }
 
 #notebookHeaderDisplay {
@@ -541,11 +539,8 @@ input:checked + .slider:before { transform: translateX(26px); }
     right: 2rem;
 }
 .fab-back { 
-    left: calc(7rem + 2rem); /* Sidebar fixed width (7rem) + desired gap (2rem) */
-    background-image: linear-gradient(to right, var(--theme-bg-button-primary) 0%, var(--theme-border-accent) 100%); /* Same color as create */
-}
-.fab-back:hover {
-    background-image: linear-gradient(to right, var(--theme-bg-button-primary-hover) 0%, var(--theme-border-accent) 100%);
+    left: calc(7rem + 1.5rem); /* Sidebar fixed width (7rem) + desired gap (1.5rem) */
+    /* Color is now same as create button by default FAB style */
 }
 
 
@@ -574,10 +569,9 @@ input:checked + .slider:before { transform: translateX(26px); }
     overflow-x: hidden; 
     padding-top: 0.75rem; 
 }
-/* Removed .sidebar.expanded as it's now fixed width */
 
 .sidebar-icon {
-    padding: 0.85rem 0.25rem; /* Reduced horizontal padding to help with squishing */
+    padding: 0.85rem 0.25rem; 
     border-radius: 0.375rem; 
     cursor: pointer; 
     transition: background-color 0.2s ease-in-out;
@@ -586,22 +580,22 @@ input:checked + .slider:before { transform: translateX(26px); }
     align-items: center; 
     justify-content: center; 
     text-align: center; 
-    margin-bottom: 1rem; /* Increased space between items */
+    margin-bottom: 1rem; 
     width: 100%; 
 }
 .sidebar-icon i {
-    font-size: 1.85rem; /* Increased icon size slightly */
-    margin-bottom: 0.4rem; /* Space between icon and text */
+    font-size: 1.85rem; 
+    margin-bottom: 0.4rem; 
     line-height: 1; 
 }
 .sidebar-icon .sidebar-text { 
     display: block; 
-    font-size: 0.7rem; /* Slightly smaller text */
+    font-size: 0.75rem; 
     line-height: 1.15; 
     white-space: normal; 
     margin-left: 0; 
-    max-width: 95%; /* Allow text to use most of the button width */
-    word-wrap: break-word; /* Help with longer words */
+    max-width: 95%; 
+    word-wrap: break-word; 
 }
 
 .sidebar-icon:hover { 
@@ -610,7 +604,7 @@ input:checked + .slider:before { transform: translateX(26px); }
 .sidebar-main-navigation {
     display: flex;
     flex-direction: column;
-    gap: 0.1rem; /* Reduced gap for tighter packing if needed */
+    gap: 0.1rem; 
 }
 .sidebar-bottom-icons { 
     padding-bottom: 1rem; 
@@ -620,7 +614,7 @@ input:checked + .slider:before { transform: translateX(26px); }
 
 .main-content-area {
     flex-grow: 1; 
-    margin-left: 7rem; /* Adjusted for new fixed sidebar width */
+    margin-left: 7rem; 
     height: 100%; 
     display: flex; 
     flex-direction: column; 
