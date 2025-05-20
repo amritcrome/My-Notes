@@ -2,9 +2,9 @@
 // Import Firebase SDKs
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
 import { 
-    getFirestore, collection, collectionGroup, addDoc, getDoc, getDocs, doc, updateDoc, deleteDoc, 
-    query, where, onSnapshot, orderBy, serverTimestamp, Timestamp, writeBatch, runTransaction, limit, startAfter, setDoc // Added setDoc here
-} from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js";
+    getFirestore, collection, collectionGroup, addDoc, getDoc, getDocs, doc, updateDoc, deleteDoc, setDoc,
+    query, where, onSnapshot, orderBy, serverTimestamp, Timestamp, writeBatch, runTransaction, limit, startAfter 
+} from "https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore.js"; 
 
 // ==========================================================================================
 // Your web app's Firebase configuration
@@ -29,8 +29,8 @@ const db = getFirestore(app);
 
 // Placeholder User ID for testing before authentication
 const PLACEHOLDER_USER_ID = "Admintesting";
-const APP_DATA_DOC_ID = "app_data"; // Intermediate document for app data
-const MEMOIR_DOCUMENT_NAME = "Memoir"; // The document ID for this app's data root under app_data
+const APP_DATA_COLLECTION_NAME = "app_data"; // Intermediate collection
+const MEMOIR_DOCUMENT_NAME = "Memoir"; // The document ID for this app's data root under the user's app_data
 
 document.addEventListener('DOMContentLoaded', () => {
     // --- DATA STORAGE ---
@@ -107,13 +107,13 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentNotesQueryBase = null; 
     let currentNotesQueryConstraints = []; 
     let unsubscribeCurrentNotesListener = null; 
+    let currentSearchTerm = ''; // For client-side search
 
-    // --- Firestore Base Path for this app's data for the current user ---
-    const userAppMemoirBasePath = `users/${PLACEHOLDER_USER_ID}/${APP_DATA_DOC_ID}/${MEMOIR_DOCUMENT_NAME}`;
+    // --- Firestore Paths (Base document for this app's data for the user) ---
+    const userAppMemoirDocPath = `users/${PLACEHOLDER_USER_ID}/${APP_DATA_COLLECTION_NAME}/${MEMOIR_DOCUMENT_NAME}`;
 
 
     // --- DOM ELEMENTS ---
-    // ... (all your getElementById and querySelector calls remain the same) ...
     const loadingOverlay = document.getElementById('loadingOverlay');
     const appSidebar = document.getElementById('appSidebar');
     const mainContentArea = document.querySelector('.main-content-area'); 
@@ -203,6 +203,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const allNotesPageTitle = document.getElementById('allNotesPageTitle');
     const notebookHeaderDisplay = document.getElementById('notebookHeaderDisplay'); 
+    const allNotesSearchContainer = document.getElementById('allNotesSearchContainer'); // New
+    const allNotesSearchInput = document.getElementById('allNotesSearchInput'); // New
     const notesPreviewColumnOuter = document.getElementById('notesPreviewColumnOuter'); 
     const notesListScrollableArea = document.getElementById('notesListScrollableArea'); 
     const noNotesMessagePreviewEl = document.getElementById('noNotesMessage');
@@ -267,6 +269,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const exportNotebookBtn = document.getElementById('exportNotebookBtn');
     const exportStatusMessage = document.getElementById('exportStatusMessage');
 
+    // Unsubscribe functions
     let unsubscribeAppSettings = null;
     let unsubscribeNotebooks = null;
     let unsubscribeTags = null;
@@ -274,7 +277,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     // --- HELPER FUNCTIONS ---
-    // ... (All helper functions like showLoadingOverlay, formatDateFromTimestamp, etc. remain the same)
     function showLoadingOverlay(message = "Loading...") { if(loadingOverlay) { loadingOverlay.innerHTML = `<i class="fas fa-spinner fa-spin fa-2x mr-3"></i> ${message}`; loadingOverlay.classList.remove('hidden');} }
     function hideLoadingOverlay() { if(loadingOverlay) loadingOverlay.classList.add('hidden'); }
     function getTimeOfDay(date) { return date.getHours()>=5&&date.getHours()<12?"Morning":date.getHours()>=12&&date.getHours()<17?"Afternoon":date.getHours()>=17&&date.getHours()<21?"Evening":"Night"; }
@@ -329,6 +331,18 @@ document.addEventListener('DOMContentLoaded', () => {
         
         applyCurrentViewMode(); 
 
+        // Search bar visibility
+        if (allNotesSearchContainer) {
+            if ((viewName === 'notes' || viewName === 'favorites') && !currentlyViewedNotebookId) {
+                allNotesSearchContainer.style.display = 'block';
+            } else {
+                allNotesSearchContainer.style.display = 'none';
+                if (allNotesSearchInput) allNotesSearchInput.value = ''; // Clear search input
+                currentSearchTerm = ''; // Clear search term
+            }
+        }
+
+
         if (viewName === 'notes') {
             if (themeSettings.viewMode === 'comfortable') {
                 if (context === 'openNote' || context === 'newNoteComfortable') {
@@ -336,6 +350,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     notesContentDiv.classList.remove('showing-grid');
                     if(noteInteractionPanel) noteInteractionPanel.style.display = 'flex'; 
                     if(notesPreviewColumnOuter) notesPreviewColumnOuter.style.display = 'none'; 
+                    if(allNotesSearchContainer) allNotesSearchContainer.style.display = 'none'; // Hide search when editor is full screen
                     if(fabCreateNote) fabCreateNote.classList.add('hidden');
                     if(fabNavigateBack) fabNavigateBack.classList.remove('hidden');
                 } else { 
@@ -343,6 +358,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     notesContentDiv.classList.remove('showing-editor');
                     if(noteInteractionPanel) noteInteractionPanel.style.display = 'none'; 
                     if(notesPreviewColumnOuter) notesPreviewColumnOuter.style.display = 'flex'; 
+                    if(allNotesSearchContainer && !currentlyViewedNotebookId) allNotesSearchContainer.style.display = 'block'; // Show search in grid view if global
                     if(fabCreateNote) fabCreateNote.classList.remove('hidden');
                     
                     if (currentlyViewedNotebookId || currentFilterTag || isFavoritesViewActive) {
@@ -351,18 +367,23 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
                     }
                 }
-            } else { 
+            } else { // Compact view
                 notesContentDiv.classList.remove('showing-grid', 'showing-editor');
                 if(notesPreviewColumnOuter) notesPreviewColumnOuter.style.display = 'flex'; 
                 if(noteInteractionPanel) noteInteractionPanel.style.display = 'flex'; 
+                if(allNotesSearchContainer && !currentlyViewedNotebookId) allNotesSearchContainer.style.display = 'block';
+                
                 if (!currentlyViewedNotebookId && !currentFilterTag && !isFavoritesViewActive) {
                      if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
                 } else {
                      if (fabNavigateBack) fabNavigateBack.classList.remove('hidden');
                 }
             }
-        } else if (viewName === 'notebooks' || viewName === 'settings' || viewName === 'trash' || viewName === 'favorites') {
+        } else if (viewName === 'notebooks' || viewName === 'settings' || viewName === 'trash') {
             if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
+            if (allNotesSearchContainer) allNotesSearchContainer.style.display = 'none';
+            if (allNotesSearchInput) allNotesSearchInput.value = '';
+            currentSearchTerm = '';
         }
 
 
@@ -381,6 +402,10 @@ document.addEventListener('DOMContentLoaded', () => {
             } else if (fabCreateNote) {
                  fabCreateNote.classList.add('hidden');
             }
+        }
+        // Re-render notes if switching to a notes view, to apply any persistent search or filters
+        if ((viewName === 'notes' || viewName === 'favorites')) {
+            renderAllNotesPreviews();
         }
     }
     function getTextColorForBackground(hexColor) { if (!hexColor) return '#000000'; const r = parseInt(hexColor.slice(1, 3), 16); const g = parseInt(hexColor.slice(3, 5), 16); const b = parseInt(hexColor.slice(5, 7), 16); const luminance = (0.299 * r + 0.587 * g + 0.114 * b); return luminance > 128 ? '#000000' : '#FFFFFF'; }
@@ -410,24 +435,22 @@ document.addEventListener('DOMContentLoaded', () => {
             unsubscribeCurrentNotesListener = null;
         }
 
+        const userAppDocRef = doc(db, "users", PLACEHOLDER_USER_ID, APP_DATA_COLLECTION_NAME, MEMOIR_DOCUMENT_NAME);
         currentNotesQueryConstraints = []; 
 
         if (currentlyViewedNotebookId) {
-            const notesPath = `${userAppMemoirBasePath}/notebooks/${currentlyViewedNotebookId}/notes`;
-            currentNotesQueryBase = collection(db, notesPath);
+            currentNotesQueryBase = collection(userAppDocRef, "notebooks", currentlyViewedNotebookId, "notes");
             if(allNotesPageTitle) {
                 const currentNb = localNotebooksCache.find(nb => nb.id === currentlyViewedNotebookId); 
                 allNotesPageTitle.textContent = `Notes in "${currentNb ? currentNb.title : 'Selected Notebook'}"`;
             }
             if(notebookHeaderDisplay) displayNotebookHeader(currentlyViewedNotebookId);
+            if(allNotesSearchContainer) allNotesSearchContainer.style.display = 'none'; // Hide search when in specific notebook
+            if(allNotesSearchInput) allNotesSearchInput.value = '';
+            currentSearchTerm = '';
         } else {
             currentNotesQueryBase = collectionGroup(db, "notes");
-            // IMPORTANT: Filter by path to the user's Memoir document for collectionGroup queries
-            // This assumes notes are under /users/{userId}/Memoir/notebooks/{notebookId}/notes/{noteId}
-            // A where clause on a parent document ID is not directly supported in collection group queries.
-            // Instead, ensure each note document has a 'userId' field and query on that.
             currentNotesQueryConstraints.push(where("userId", "==", PLACEHOLDER_USER_ID));
-
 
             if (isFavoritesViewActive) {
                 currentNotesQueryConstraints.push(where("isFavorite", "==", true));
@@ -439,6 +462,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if(allNotesPageTitle) allNotesPageTitle.textContent = "All Notes";
             }
             if(notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none';
+            if(allNotesSearchContainer && notesContentDiv.classList.contains('main-view-content-active') && !(themeSettings.viewMode === 'comfortable' && notesContentDiv.classList.contains('showing-editor'))) {
+                allNotesSearchContainer.style.display = 'block'; // Show search for global views
+            }
         }
         
         const initialQuery = query(
@@ -452,14 +478,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if(noNotesMessagePreviewEl) noNotesMessagePreviewEl.style.display = 'none'; 
 
         unsubscribeCurrentNotesListener = onSnapshot(initialQuery, (querySnapshot) => {
-            console.log("Initial notes batch snapshot received. Docs count:", querySnapshot.docs.length);
             const newNotesBatch = [];
             querySnapshot.forEach((noteDoc) => {
                 const data = noteDoc.data();
                 newNotesBatch.push({ 
-                    id: noteDoc.id, ...data, 
-                    userId: data.userId || PLACEHOLDER_USER_ID, 
-                    notebookId: data.notebookId || (noteDoc.ref.parent.parent ? noteDoc.ref.parent.parent.id : null), 
+                    id: noteDoc.id, ...data, userId: data.userId || PLACEHOLDER_USER_ID, 
+                    notebookId: data.notebookId || noteDoc.ref.parent.parent.id, 
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date()),
                     modifiedAt: data.modifiedAt?.toDate ? data.modifiedAt.toDate() : (data.modifiedAt ? new Date(data.modifiedAt) : new Date()),
                     edits: (data.edits || []).map(edit => ({ 
@@ -483,9 +507,6 @@ document.addEventListener('DOMContentLoaded', () => {
             hideLoadingOverlay();
         }, (error) => {
             console.error("Error fetching initial notes batch: ", error);
-            console.error("Initial notes batch error message: ", error.message);
-            console.error("Initial notes batch error stack: ", error.stack);
-            console.error("Initial notes batch error code: ", error.code);
             isLoadingMoreNotes = false;
             hideLoadingOverlay();
         });
@@ -496,16 +517,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         isLoadingMoreNotes = true;
-        if(notesListScrollableArea && !notesListScrollableArea.querySelector('#loadingMoreSpinner')) { 
+        if(notesListScrollableArea.querySelector('#loadingMoreSpinner')) { /* Already showing */ }
+        else if (notesListScrollableArea) { 
             const spinner = document.createElement('div');
             spinner.id = 'loadingMoreSpinner';
             spinner.className = 'text-center py-4 text-gray-500';
             spinner.innerHTML = '<i class="fas fa-spinner fa-spin fa-lg"></i> Loading more...';
             notesListScrollableArea.appendChild(spinner);
         }
-
-
-        console.log("Fetching more notes after:", lastFetchedNoteDoc.id);
 
         const nextQuery = query(
             currentNotesQueryBase,
@@ -521,9 +540,8 @@ document.addEventListener('DOMContentLoaded', () => {
             querySnapshot.forEach((noteDoc) => {
                 const data = noteDoc.data();
                 newNotesBatch.push({ 
-                    id: noteDoc.id, ...data, 
-                    userId: data.userId || PLACEHOLDER_USER_ID,
-                    notebookId: data.notebookId || (noteDoc.ref.parent.parent ? noteDoc.ref.parent.parent.id : null), 
+                    id: noteDoc.id, ...data, userId: data.userId || PLACEHOLDER_USER_ID,
+                    notebookId: data.notebookId || noteDoc.ref.parent.parent.id, 
                     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt ? new Date(data.createdAt) : new Date()),
                     modifiedAt: data.modifiedAt?.toDate ? data.modifiedAt.toDate() : (data.modifiedAt ? new Date(data.modifiedAt) : new Date()),
                     edits: (data.edits || []).map(edit => ({ 
@@ -552,40 +570,48 @@ document.addEventListener('DOMContentLoaded', () => {
     if (notesListScrollableArea) {
         notesListScrollableArea.addEventListener('scroll', () => {
             if (notesListScrollableArea.scrollTop + notesListScrollableArea.clientHeight >= notesListScrollableArea.scrollHeight - 200) {
-                fetchMoreNotes();
+                if (!currentSearchTerm) { // Only lazy load if not actively client-side searching all loaded notes
+                    fetchMoreNotes();
+                }
             }
         });
+    }
+    
+    // Debounced search handler
+    const debouncedSearchHandler = debounce(() => {
+        currentSearchTerm = allNotesSearchInput.value.trim().toLowerCase();
+        renderAllNotesPreviews(); // Re-render with client-side search filter
+    }, 300);
+
+    if (allNotesSearchInput) {
+        allNotesSearchInput.addEventListener('input', debouncedSearchHandler);
     }
 
 
     async function initializeDataListeners() {
         showLoadingOverlay("Loading App Data...");
         try {
-            const appSettingsPath = `${userAppMemoirBasePath}/app_settings/user_specific_settings`;
+            const appSettingsPath = `${userAppMemoirDocPath}/app_settings/user_specific_settings`;
             const appSettingsRef = doc(db, appSettingsPath);
 
             unsubscribeAppSettings = onSnapshot(appSettingsRef, async (docSnap) => {
-                console.log("User app_settings snapshot received.");
                 if (docSnap.exists()) {
                     const settingsData = docSnap.data();
-                    Object.assign(themeSettings, settingsData); 
+                     Object.assign(themeSettings, settingsData); 
                     paletteColors = settingsData.paletteColors || [...initialPaletteColors]; 
                     defaultThemeColorsFromDB = settingsData.defaultThemeColors || [...initialDefaultThemeColors]; 
                 } else { 
-                    console.log("No user_app_settings found, creating with initial defaults.");
                     themeSettings = { ...initialThemeSettings }; 
                     paletteColors = [...initialPaletteColors];
                     defaultThemeColorsFromDB = [...initialDefaultThemeColors];
                     try { 
-                        const memoirDocRef = doc(db, userAppMemoirBasePath); // Path to /users/{uid}/Memoir
-                        await setDoc(memoirDocRef, { initializedForApp: "MemoirNotes", userId: PLACEHOLDER_USER_ID }, { merge: true }); // Ensure parent doc exists
-                        
+                        const memoirAppDocRef = doc(db, userAppMemoirDocPath);
+                        await setDoc(memoirAppDocRef, { initializedAt: serverTimestamp(), appName: "Memoir Notes" }, {merge: true}); 
                         await setDoc(appSettingsRef, { 
                             ...initialThemeSettings, 
                             paletteColors: [...initialPaletteColors],
                             defaultThemeColors: [...initialDefaultThemeColors]
                         }); 
-                        console.log("Default user app settings created in Firestore.");
                     } catch (e) { console.error("Error creating default user app settings:", e); }
                 }
                 applyThemeSettings(); 
@@ -608,15 +634,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                     initialViewDetermined = true;
                 } else if(notesContentDiv.classList.contains('main-view-content-active')) {
-                     setupNotesListenerAndLoadInitialBatch();
+                     setupNotesListenerAndLoadInitialBatch(); // Re-setup if already in notes view and settings change
                 }
                  hideLoadingOverlay();
             }, (error) => {
                 console.error("Error fetching app settings:", error);
-                console.error("App settings error Name:", error.name);
-                console.error("App settings error Message:", error.message);
-                console.error("App settings error Code:", error.code);
-                console.error("App settings error Stack:", error.stack);
                 themeSettings = { ...initialThemeSettings }; paletteColors = [...initialPaletteColors]; defaultThemeColorsFromDB = [...initialDefaultThemeColors];
                 applyThemeSettings(); renderPaletteColors(); updatePaletteLimitMessage();
                 if (!initialViewDetermined && db) { 
@@ -626,7 +648,7 @@ document.addEventListener('DOMContentLoaded', () => {
                  hideLoadingOverlay();
             });
 
-            const notebooksCollectionPath = `${userAppMemoirBasePath}/notebooks`;
+            const notebooksCollectionPath = `${userAppMemoirDocPath}/notebooks`;
             const notebooksQuery = query(collection(db, notebooksCollectionPath), orderBy("createdAt", "desc"));
             unsubscribeNotebooks = onSnapshot(notebooksQuery, (querySnapshot) => {
                 const fetchedNotebooks = [];
@@ -646,14 +668,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }, (error) => { 
                 console.error("Error fetching notebooks: ", error); 
-                console.error("Notebooks error Name: ", error.name);
-                console.error("Notebooks error Message: ", error.message);
-                console.error("Notebooks error Code: ", error.code);
-                console.error("Notebooks error Stack: ", error.stack);
                 alert("Error loading notebooks."); 
             });
             
-            const tagsCollectionPath = `${userAppMemoirBasePath}/tags`;
+            const tagsCollectionPath = `${userAppMemoirDocPath}/tags`;
             unsubscribeTags = onSnapshot(query(collection(db, tagsCollectionPath), orderBy("name")), (querySnapshot) => {
                 const newLocalTagsCache = [];
                 const tagMap = new Map(); 
@@ -673,14 +691,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (currentInteractingNoteIdInPanel) renderTagPills(); 
             }, (error) => { 
                 console.error("Error fetching tags: ", error); 
-                console.error("Tags error Name: ", error.name);
-                console.error("Tags error Message: ", error.message);
-                console.error("Tags error Code: ", error.code);
-                console.error("Tags error Stack: ", error.stack);
                 alert("Error loading tags."); 
             });
 
-            const deletedNotesCollectionPath = `${userAppMemoirBasePath}/deleted_notes`;
+            const deletedNotesCollectionPath = `${userAppMemoirDocPath}/deleted_notes`;
             const deletedNotesQuery = query(collection(db, deletedNotesCollectionPath), orderBy("deletedAt", "desc"));
             unsubscribeDeletedNotes = onSnapshot(deletedNotesQuery, (querySnapshot) => {
                 const fetchedDeletedNotes = [];
@@ -700,34 +714,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }, (error) => { 
                 console.error("Error fetching deleted notes: ", error); 
-                console.error("Deleted notes error Name: ", error.name);
-                console.error("Deleted notes error Message: ", error.message);
-                console.error("Deleted notes error Code: ", error.code);
-                console.error("Deleted notes error Stack: ", error.stack);
                 alert("Error loading deleted notes."); 
             });
 
 
         } catch (caughtError) { 
-            console.error("FATAL Error during initial listener setup phase. Full error object:", caughtError);
-            if (caughtError && caughtError.name) console.error("Error Name:", caughtError.name);
-            if (caughtError && caughtError.message) console.error("Error Message:", caughtError.message);
-            if (caughtError && caughtError.stack) console.error("Error Stack:", caughtError.stack);
-            if (caughtError && caughtError.code) console.error("Error Code (if Firebase error):", caughtError.code);
-            
-            try {
-                console.error("Stringified Error:", JSON.stringify(caughtError, Object.getOwnPropertyNames(caughtError)));
-            } catch (e) {
-                console.error("Could not stringify error object:", e);
-            }
-            
-            try { if (typeof unsubscribeAppSettings === 'function') unsubscribeAppSettings(); } catch(e) { console.error("Error unsubscribing appSettings:", e); }
-            try { if (typeof unsubscribeNotebooks === 'function') unsubscribeNotebooks(); } catch(e) { console.error("Error unsubscribing notebooks:", e); }
-            try { if (typeof unsubscribeCurrentNotesListener === 'function') unsubscribeCurrentNotesListener(); } catch(e) { console.error("Error unsubscribing currentNotes:", e); }
-            try { if (typeof unsubscribeTags === 'function') unsubscribeTags(); } catch(e) { console.error("Error unsubscribing tags:", e); }
-            try { if (typeof unsubscribeDeletedNotes === 'function') unsubscribeDeletedNotes(); } catch(e) { console.error("Error unsubscribing deletedNotes:", e); }
-            
-            alert("A critical error occurred during app initialization. Please check the console (F12) for more details and contact support if the issue persists.");
+            console.error("FATAL Error during initial listener setup phase:", caughtError);
+            alert("A critical error occurred during app initialization. Please check the console.");
             hideLoadingOverlay();
         }
     }
@@ -770,7 +763,7 @@ document.addEventListener('DOMContentLoaded', () => {
             currentlyViewedNotebookId = null; 
             currentFilterTag = null; 
             clearInteractionPanel(true); 
-            switchToMainView('notes'); 
+            switchToMainView('notes'); // 'favorites' context is handled by isFavoritesViewActive
             setupNotesListenerAndLoadInitialBatch(); 
         }); 
     }
@@ -797,6 +790,7 @@ document.addEventListener('DOMContentLoaded', () => {
             notesContentDiv.classList.add('showing-grid');
             if(noteInteractionPanel) noteInteractionPanel.style.display = 'none';
             if(notesPreviewColumnOuter) notesPreviewColumnOuter.style.display = 'flex';
+            if(allNotesSearchContainer && !currentlyViewedNotebookId) allNotesSearchContainer.style.display = 'block';
             if(fabCreateNote) fabCreateNote.classList.remove('hidden');
             
             if (currentlyViewedNotebookId) { 
@@ -805,23 +799,26 @@ document.addEventListener('DOMContentLoaded', () => {
                  if(fabNavigateBack) fabNavigateBack.classList.add('hidden');
             }
             clearInteractionPanel(true); 
-            setupNotesListenerAndLoadInitialBatch(); 
-        } else if (currentlyViewedNotebookId) { 
-             if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
+            // No need to call setupNotesListenerAndLoadInitialBatch here, renderAllNotesPreviews will be called by switchToMainView or other flows
+        } else if (currentlyViewedNotebookId) { // Navigating back from a specific notebook's notes list
+            if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
             isFavoritesViewActive = false; 
             currentFilterTag = null; 
             currentlyViewedNotebookId = null; 
             clearInteractionPanel(true); 
-            switchToMainView('notebooks');
+            switchToMainView('notebooks'); // Go to notebooks page
             if (notebookHeaderDisplay) notebookHeaderDisplay.style.display = 'none';
-            if (allNotesPageTitle) allNotesPageTitle.textContent = "All Notes"; 
-        } else { 
-             if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
+            if (allNotesPageTitle) allNotesPageTitle.textContent = "All Notes"; // Reset title
+            if (allNotesSearchContainer) allNotesSearchContainer.style.display = 'none';
+            if (allNotesSearchInput) allNotesSearchInput.value = '';
+            currentSearchTerm = '';
+        } else { // Navigating back from "All Notes", "Favorites", or "Tagged Notes"
+            if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
             isFavoritesViewActive = false; 
             currentFilterTag = null; 
             currentlyViewedNotebookId = null; 
             clearInteractionPanel(true); 
-            switchToMainView('notes'); 
+            switchToMainView('notes'); // Default to "All Notes"
             setupNotesListenerAndLoadInitialBatch();
         }
     }
@@ -862,11 +859,11 @@ document.addEventListener('DOMContentLoaded', () => {
             card.addEventListener('click', (e) => {
                 if (e.target.closest('.notebook-page-card-icon')) return;
                 const notebookId = e.currentTarget.dataset.notebookId;
-                currentlyViewedNotebookId = notebookId;
+                currentlyViewedNotebookId = notebookId; // Set this first
                 isFavoritesViewActive = false; currentFilterTag = null;
                 
                 clearInteractionPanel(true); 
-                switchToMainView('notes'); 
+                switchToMainView('notes'); // This will hide search bar due to currentlyViewedNotebookId
                 
                 if (themeSettings.viewMode === 'comfortable') {
                     notesContentDiv.classList.add('showing-grid'); 
@@ -878,7 +875,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (fabNavigateBack) fabNavigateBack.classList.remove('hidden'); 
 
                 displayNotebookHeader(notebookId); 
-                setupNotesListenerAndLoadInitialBatch(); 
+                setupNotesListenerAndLoadInitialBatch(); // This will also handle search bar visibility
             });
 
             card.querySelector('.edit-notebook-icon-btn').addEventListener('click', (e) => {
@@ -931,11 +928,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
         DEFAULT_TAG_COLOR = themeSettings.appDefaultBackgroundColor;
-        if(document.getElementById('themeAppDefaultBgColorPicker')) document.getElementById('themeAppDefaultBgColorPicker').value = themeSettings.appDefaultBackgroundColor;
-        if(document.getElementById('themeSidebarBgColorPicker')) document.getElementById('themeSidebarBgColorPicker').value = themeSettings.themeSidebarBg;
-        if(document.getElementById('themeButtonPrimaryColorPicker')) document.getElementById('themeButtonPrimaryColorPicker').value = themeSettings.themeButtonPrimary;
-        if(document.getElementById('themeBorderAccentColorPicker')) document.getElementById('themeBorderAccentColorPicker').value = themeSettings.themeBorderAccent;
-        
+        document.getElementById('themeAppDefaultBgColorPicker').value = themeSettings.appDefaultBackgroundColor;
+        document.getElementById('themeSidebarBgColorPicker').value = themeSettings.themeSidebarBg;
+        document.getElementById('themeButtonPrimaryColorPicker').value = themeSettings.themeButtonPrimary;
+        document.getElementById('themeBorderAccentColorPicker').value = themeSettings.themeBorderAccent;
         if(defaultHomepageSelector) defaultHomepageSelector.value = themeSettings.defaultHomepage; 
         if (viewModeCompactRadio) viewModeCompactRadio.checked = themeSettings.viewMode === 'compact';
         if (viewModeComfortableRadio) viewModeComfortableRadio.checked = themeSettings.viewMode === 'comfortable';
@@ -961,9 +957,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         themeSidebarBg: themeSettings.themeSidebarBg,
                         themeButtonPrimary: themeSettings.themeButtonPrimary,
                         themeBorderAccent: themeSettings.themeBorderAccent
-                    }
+                    },
+                    defaultHomepage: themeSettings.defaultHomepage,
+                    viewMode: themeSettings.viewMode,
                 };
-                const appSettingsPath = `${userAppMemoirBasePath}/app_settings/user_specific_settings`;
+                const appSettingsPath = `${userAppMemoirDocPath}/app_settings/user_specific_settings`;
                 await setDoc(doc(db, appSettingsPath), settingsToSave, { merge: true }); 
             } catch (e) { 
                 console.error("Error updating theme setting:", e); 
@@ -977,7 +975,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const newDefaultPage = event.target.value;
             themeSettings.defaultHomepage = newDefaultPage; 
             try {
-                const appSettingsPath = `${userAppMemoirBasePath}/app_settings/user_specific_settings`;
+                const appSettingsPath = `${userAppMemoirDocPath}/app_settings/user_specific_settings`;
                 await setDoc(doc(db, appSettingsPath), { defaultHomepage: newDefaultPage }, { merge: true });
             } catch (e) {
                 console.error("Error updating default homepage setting:", e);
@@ -990,7 +988,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (viewModeCompactRadio.checked) {
                 themeSettings.viewMode = 'compact';
                 try {
-                    const appSettingsPath = `${userAppMemoirBasePath}/app_settings/user_specific_settings`;
+                    const appSettingsPath = `${userAppMemoirDocPath}/app_settings/user_specific_settings`;
                     await setDoc(doc(db, appSettingsPath), { viewMode: 'compact' }, { merge: true });
                     applyCurrentViewMode();
                     if (notesContentDiv.classList.contains('main-view-content-active')) {
@@ -1005,7 +1003,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (viewModeComfortableRadio.checked) {
                 themeSettings.viewMode = 'comfortable';
                 try {
-                    const appSettingsPath = `${userAppMemoirBasePath}/app_settings/user_specific_settings`;
+                    const appSettingsPath = `${userAppMemoirDocPath}/app_settings/user_specific_settings`;
                     await setDoc(doc(db, appSettingsPath), { viewMode: 'comfortable' }, { merge: true });
                     applyCurrentViewMode();
                      if (notesContentDiv.classList.contains('main-view-content-active')) {
@@ -1026,30 +1024,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cancelThemeResetBtn) cancelThemeResetBtn.addEventListener('click', () => { if (confirmThemeResetModal) confirmThemeResetModal.style.display = 'none'; });
     if (executeThemeResetBtn) {
         executeThemeResetBtn.addEventListener('click', async () => {
-            console.log("Reset confirmed by user via custom modal.");
             showLoadingOverlay("Resetting theme...");
             try {
-                const appSettingsPath = `${userAppMemoirBasePath}/app_settings/user_specific_settings`;
-                const initialSettingsForReset = {
-                    ...initialThemeSettings,
-                    activeThemeColors: { 
-                        appDefaultBackgroundColor: initialThemeSettings.appDefaultBackgroundColor,
-                        themeSidebarBg: initialThemeSettings.themeSidebarBg,
-                        themeButtonPrimary: initialThemeSettings.themeButtonPrimary,
-                        themeBorderAccent: initialThemeSettings.themeBorderAccent
-                    },
+                const appSettingsPath = `${userAppMemoirDocPath}/app_settings/user_specific_settings`;
+                await setDoc(doc(db, appSettingsPath), { 
+                    activeThemeColors: { ...initialThemeSettings }, 
                     defaultThemeColors: [...initialDefaultThemeColors], 
-                    paletteColors: [...initialPaletteColors]
-                };
-                 // Explicitly remove fields not in initialThemeSettings if they exist in Firestore doc.
-                // Or better, just set the whole object.
-                await setDoc(doc(db, appSettingsPath), initialSettingsForReset); 
-                console.log("Reset theme command sent to Firestore successfully.");
+                    paletteColors: [...initialPaletteColors], 
+                    defaultHomepage: initialThemeSettings.defaultHomepage,
+                    viewMode: initialThemeSettings.viewMode 
+                });
             } catch (e) {
                 console.error("Error resetting theme in Firestore:", e);
                 alert("Failed to reset theme in Firestore. Check console.");
             } finally {
                 if (confirmThemeResetModal) confirmThemeResetModal.style.display = 'none';
+                hideLoadingOverlay(); 
             }
         });
     }
@@ -1092,7 +1082,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const originalColor = paletteColors[index]; 
                     paletteColors.splice(index, 1); 
                     try { 
-                        const appSettingsPath = `${userAppMemoirBasePath}/app_settings/user_specific_settings`;
+                        const appSettingsPath = `${userAppMemoirDocPath}/app_settings/user_specific_settings`;
                         await setDoc(doc(db, appSettingsPath), { paletteColors: paletteColors }, { merge: true }); 
                         renderPaletteColors(); 
                         updatePaletteLimitMessage();
@@ -1114,14 +1104,14 @@ document.addEventListener('DOMContentLoaded', () => {
         addPaletteColorBtn.addEventListener('click', async () => { 
             const paletteLimit = PALETTE_BASE_LIMIT + localNotebooksCache.length;
             if (paletteColors.length >= paletteLimit) {
-                alert(`Color palette limit reached (${paletteLimit} colors). You can delete existing palette colors or create more notebooks to increase the limit.`);
+                alert(`Color palette limit reached (${paletteLimit} colors).`);
                 return;
             }
             const newColor = newPaletteColorPicker.value; 
             if (newColor && !paletteColors.includes(newColor)) { 
                 paletteColors.push(newColor); 
                 try { 
-                    const appSettingsPath = `${userAppMemoirBasePath}/app_settings/user_specific_settings`;
+                    const appSettingsPath = `${userAppMemoirDocPath}/app_settings/user_specific_settings`;
                     await setDoc(doc(db, appSettingsPath), { paletteColors: paletteColors }, { merge: true }); 
                     renderPaletteColors(); 
                     newPaletteColorPicker.value = "#000000"; 
@@ -1207,8 +1197,8 @@ document.addEventListener('DOMContentLoaded', () => {
             coverColor: finalCoverColor 
         }; 
         try { 
-            const notebooksCollectionPath = `${userAppMemoirBasePath}/notebooks`;
-            const docRef = await addDoc(collection(db, notebooksCollectionPath), newNotebook); 
+            const notebooksCollectionPath = `${userAppMemoirDocPath}/notebooks`;
+            await addDoc(collection(db, notebooksCollectionPath), newNotebook); 
         } catch (e) { console.error("Error adding notebook: ", e); alert("Failed to create notebook."); } 
         if(createNotebookModal) createNotebookModal.style.display = 'none'; 
         createNotebookForm.reset(); 
@@ -1226,7 +1216,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const notebookId = editingNotebookIdField.value;
         if (!notebookId) { hideLoadingOverlay(); return; }
 
-        const notebookDocPath = `${userAppMemoirBasePath}/notebooks/${notebookId}`;
+        const notebookDocPath = `${userAppMemoirDocPath}/notebooks/${notebookId}`;
         const notebookRef = doc(db, notebookDocPath);
         const updates = {
             title: enNotebookTitleField.value.trim() || "Untitled Notebook",
@@ -1304,7 +1294,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showLoadingOverlay(`Moving notes from "${notebookName}" to Trash...`);
         try {
             const batch = writeBatch(db);
-            const notesInNotebookRef = collection(db, `${userAppMemoirBasePath}/notebooks/${notebookId}/notes`);
+            const notesInNotebookRef = collection(db, `${userAppMemoirDocPath}/notebooks/${notebookId}/notes`);
             const notesSnapshot = await getDocs(notesInNotebookRef);
             const notesToMoveIds = []; 
             let tagsFromMovedNotes = new Set();
@@ -1313,13 +1303,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const noteData = noteDoc.data();
                 const deletedNoteData = {
                     ...noteData, 
-                    userId: PLACEHOLDER_USER_ID, 
                     originalNoteId: noteDoc.id,
                     originalNotebookId: notebookId,
                     originalNotebookName: notebookName,
                     deletedAt: serverTimestamp()
                 };
-                const deletedNotesCollectionPath = `${userAppMemoirBasePath}/deleted_notes`;
+                const deletedNotesCollectionPath = `${userAppMemoirDocPath}/deleted_notes`;
                 const newDeletedNoteRef = doc(collection(db, deletedNotesCollectionPath));
                 batch.set(newDeletedNoteRef, deletedNoteData);
                 batch.delete(noteDoc.ref); 
@@ -1330,7 +1319,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
-            const notebookDocPath = `${userAppMemoirBasePath}/notebooks/${notebookId}`;
+            const notebookDocPath = `${userAppMemoirDocPath}/notebooks/${notebookId}`;
             const notebookRef = doc(db, notebookDocPath);
             batch.delete(notebookRef); 
             await batch.commit();
@@ -1391,7 +1380,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showLoadingOverlay("Deleting Permanently...");
         
         if (noteActionContext.isDeletedNote) { 
-            const deletedNoteDocPath = `${userAppMemoirBasePath}/deleted_notes/${noteActionContext.id}`;
+            const deletedNoteDocPath = `${userAppMemoirDocPath}/deleted_notes/${noteActionContext.id}`;
             try {
                 await deleteDoc(doc(db, deletedNoteDocPath));
             } catch (e) { console.error("Error deleting note permanently from trash:", e); alert("Failed to delete note permanently."); }
@@ -1407,7 +1396,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         showLoadingOverlay("Moving to Trash...");
         try {
-            const noteDocPath = `${userAppMemoirBasePath}/notebooks/${notebookId}/notes/${noteId}`;
+            const noteDocPath = `${userAppMemoirDocPath}/notebooks/${notebookId}/notes/${noteId}`;
             const noteRef = doc(db, noteDocPath);
             const noteSnap = await getDoc(noteRef);
             if (noteSnap.exists()) {
@@ -1416,7 +1405,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const deletedNoteData = {
                     ...noteData, 
-                    userId: PLACEHOLDER_USER_ID,
                     originalNoteId: noteId,
                     originalNotebookId: notebookId,
                     originalNotebookName: originalNotebook ? originalNotebook.title : "Unknown Notebook",
@@ -1424,12 +1412,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
                 
                 const batch = writeBatch(db);
-                const deletedNotesCollectionPath = `${userAppMemoirBasePath}/deleted_notes`;
+                const deletedNotesCollectionPath = `${userAppMemoirDocPath}/deleted_notes`;
                 const newDeletedNoteRef = doc(collection(db, deletedNotesCollectionPath));
                 batch.set(newDeletedNoteRef, deletedNoteData);
                 batch.delete(noteRef);
 
-                const parentNotebookDocPath = `${userAppMemoirBasePath}/notebooks/${notebookId}`;
+                const parentNotebookDocPath = `${userAppMemoirDocPath}/notebooks/${notebookId}`;
                 const parentNotebookRef = doc(db, parentNotebookDocPath);
                 const parentNotebookSnap = await getDoc(parentNotebookRef);
                 if (parentNotebookSnap.exists()) {
@@ -1473,26 +1461,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!newName) { alert("Tag name cannot be empty."); return; } 
         if (newName !== originalName && localTagsCache.some(t => t.name === newName && t.id !== tagId)) { alert(`Tag "${newName}" already exists.`); return; } 
         
-        const tagDocPath = `${userAppMemoirBasePath}/tags/${tagId}`;
+        const tagDocPath = `${userAppMemoirDocPath}/tags/${tagId}`;
         const tagRef = doc(db, tagDocPath); 
         
         try { 
             await updateDoc(tagRef, { name: newName, color: newColor, purpose: newPurpose, userId: PLACEHOLDER_USER_ID }); 
             if (originalName !== newName) { 
                 const batch = writeBatch(db);
-                const notesToUpdateQuery = query(
-                    collectionGroup(db, "notes"), 
-                    where("userId", "==", PLACEHOLDER_USER_ID), 
-                    where("tags", "array-contains", { name: originalName })
-                );
+                const notesToUpdateQuery = query(collectionGroup(db, "notes"), where("userId", "==", PLACEHOLDER_USER_ID), where("tags", "array-contains", { name: originalName }));
                 const notesSnapshot = await getDocs(notesToUpdateQuery); 
                 notesSnapshot.forEach(noteDoc => { 
-                    // Ensure the noteDoc.ref.path includes the full path structure for this user
-                    if (noteDoc.ref.path.startsWith(`users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks`)) {
-                        const noteData = noteDoc.data(); 
-                        const updatedTags = noteData.tags.map(t => t.name === originalName ? { ...t, name: newName } : t); 
-                        batch.update(noteDoc.ref, { tags: updatedTags }); 
-                    }
+                    const noteData = noteDoc.data(); 
+                    const updatedTags = noteData.tags.map(t => t.name === originalName ? { ...t, name: newName } : t); 
+                    batch.update(noteDoc.ref, { tags: updatedTags }); 
                 }); 
                 await batch.commit(); 
             } 
@@ -1506,22 +1487,16 @@ document.addEventListener('DOMContentLoaded', () => {
         const tagNameLower = tagName.toLowerCase();
         try { 
             const batch = writeBatch(db); 
-            const tagDocPath = `${userAppMemoirBasePath}/tags/${tagId}`;
+            const tagDocPath = `${userAppMemoirDocPath}/tags/${tagId}`;
             const tagRef = doc(db, tagDocPath); 
             batch.delete(tagRef); 
             
-            const notesWithTagQuery = query(
-                collectionGroup(db, "notes"), 
-                where("userId", "==", PLACEHOLDER_USER_ID), 
-                where("tags", "array-contains", { name: tagNameLower })
-            ); 
+            const notesWithTagQuery = query(collectionGroup(db, "notes"), where("userId", "==", PLACEHOLDER_USER_ID), where("tags", "array-contains", { name: tagNameLower })); 
             const notesSnapshot = await getDocs(notesWithTagQuery); 
             notesSnapshot.forEach(noteDoc => { 
-                if (noteDoc.ref.path.startsWith(`users/${PLACEHOLDER_USER_ID}/${MEMOIR_DOCUMENT_NAME}/notebooks`)) {
-                    const noteData = noteDoc.data(); 
-                    const updatedTags = noteData.tags.filter(t => t.name !== tagNameLower); 
-                    batch.update(noteDoc.ref, { tags: updatedTags }); 
-                }
+                const noteData = noteDoc.data(); 
+                const updatedTags = noteData.tags.filter(t => t.name !== tagNameLower); 
+                batch.update(noteDoc.ref, { tags: updatedTags }); 
             }); 
             await batch.commit(); 
         } catch (e) { 
@@ -1534,17 +1509,15 @@ document.addEventListener('DOMContentLoaded', () => {
     async function checkAndCleanupOrphanedTag(tagName) {
         if (!tagName) return;
         const tagNameLower = tagName.toLowerCase();
-        const notesWithTagQuery = query(
-            collectionGroup(db, "notes"), 
-            where("userId", "==", PLACEHOLDER_USER_ID), 
-            where("tags", "array-contains", { name: tagNameLower }), 
-            limit(1)
-        );
+        const notesWithTagQuery = query(collectionGroup(db, "notes"), 
+                                      where("userId", "==", PLACEHOLDER_USER_ID), 
+                                      where("tags", "array-contains", { name: tagNameLower }), 
+                                      limit(1));
         try {
             const notesSnapshot = await getDocs(notesWithTagQuery);
             if (notesSnapshot.empty) { 
-                const tagsCollectionPath = `${userAppMemoirBasePath}/tags`;
-                const tagsQueryToDelete = query(collection(db, tagsCollectionPath), where("name", "==", tagNameLower), where("userId", "==", PLACEHOLDER_USER_ID));
+                const tagsCollectionPath = `${userAppMemoirDocPath}/tags`;
+                const tagsQueryToDelete = query(collection(db, tagsCollectionPath), where("name", "==", tagNameLower));
                 const tagDocsSnapshot = await getDocs(tagsQueryToDelete);
                 if (!tagDocsSnapshot.empty) {
                     const tagDocToDelete = tagDocsSnapshot.docs[0]; 
@@ -1617,7 +1590,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     
         const editsDescription = interactionPanelEditsMadeInputField.value.trim();
-        const noteRef = doc(db, `${userAppMemoirBasePath}/notebooks/${currentInteractingNoteOriginalNotebookId}/notes/${currentInteractingNoteIdInPanel}`);
+        const noteRef = doc(db, `${userAppMemoirDocPath}/notebooks/${currentInteractingNoteOriginalNotebookId}/notes/${currentInteractingNoteIdInPanel}`);
     
         try {
             await runTransaction(db, async (transaction) => {
@@ -1671,7 +1644,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
     
-            console.log("Edit description processed for note:", currentInteractingNoteIdInPanel);
         } catch (e) {
             console.error("Error in saveCurrentEditDescription transaction:", e);
         }
@@ -1962,9 +1934,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (tempNote && tempNote.title.trim() === "" && tempNote.text.trim() === "" && (!tempNote.activity || tempNote.activity.trim() === "")) {
                 if(isSwitchingContext || (!noteTitleInputField_panel.value.trim() && !noteTextInputField_panel.value.trim())){ 
                     try {
-                        const tempNoteDocPath = `${userAppMemoirBasePath}/notebooks/${tempNote.notebookId}/notes/${noteBeingProcessedId}`;
+                        const tempNoteDocPath = `${userAppMemoirDocPath}/notebooks/${tempNote.notebookId}/notes/${noteBeingProcessedId}`;
                         await deleteDoc(doc(db, tempNoteDocPath));
-                        const notebookDocPath = `${userAppMemoirBasePath}/notebooks/${tempNote.notebookId}`;
+                        const notebookDocPath = `${userAppMemoirDocPath}/notebooks/${tempNote.notebookId}`;
                         const notebookRef = doc(db, notebookDocPath);
                         const notebookSnap = await getDoc(notebookRef);
                         if (notebookSnap.exists()) {
@@ -2037,20 +2009,32 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('click', (event) => { if (event.target === createNotebookModal) { createNotebookModal.style.display = 'none'; createNotebookForm.reset(); currentSelectedNotebookCoverColor_create = null; } if (event.target === editTagModal) closeEditTagModal(); if (event.target === editNotebookModal) { editNotebookModal.style.display = 'none'; editNotebookForm.reset(); currentSelectedNotebookCoverColor = null; } if (event.target === confirmTagDeleteModal) closeConfirmTagDeleteModal(); if (event.target === confirmNotebookDeleteModal) closeConfirmDeleteNotebookModal(); if (event.target === confirmNoteActionModal) closeConfirmNoteActionModal(); if (event.target === confirmThemeResetModal) { if(confirmThemeResetModal) confirmThemeResetModal.style.display = 'none';} if (event.target === restoreNoteWithOptionsModal) { restoreNoteWithOptionsModal.style.display = 'none'; noteToRestoreWithOptions = null; } if (event.target === confirmEmptyTrashModal) { confirmEmptyTrashModal.style.display = 'none'; } });
 
     function renderAllNotesPreviews() { 
-        if(!notesListScrollableArea || !noNotesMessagePreviewEl || !allNotesPageTitle) return; 
+        if(!notesListScrollableArea || !noNotesMessagePreviewEl || !allNotesPageTitle) return;
         
         const isCurrentlyShowingGrid = themeSettings.viewMode === 'comfortable' && notesContentDiv.classList.contains('showing-grid');
-        const isCurrentlyShowingEditor = themeSettings.viewMode === 'comfortable' && notesContentDiv.classList.contains('showing-editor');
+        const isCurrentlyShowingEditorComfortable = themeSettings.viewMode === 'comfortable' && notesContentDiv.classList.contains('showing-editor');
 
-        if (isCurrentlyShowingEditor && !currentlyViewedNotebookId && !currentFilterTag && !isFavoritesViewActive) {
+        // If in comfortable editor view and it's a global notes view, don't render previews (editor takes full space)
+        if (isCurrentlyShowingEditorComfortable && !currentlyViewedNotebookId) {
             notesListScrollableArea.innerHTML = ''; 
             noNotesMessagePreviewEl.style.display = 'none';
             return;
         }
 
         notesListScrollableArea.innerHTML = ""; 
-        let notesToDisplay = [...localNotesCache]; 
         
+        let notesToProcess = [...localNotesCache];
+        let filteredNotesForDisplay = [...notesToProcess];
+
+        // Apply client-side search if a search term exists
+        if (currentSearchTerm) {
+            filteredNotesForDisplay = notesToProcess.filter(note =>
+                (note.title && note.title.toLowerCase().includes(currentSearchTerm)) ||
+                (note.text && note.text.toLowerCase().includes(currentSearchTerm))
+            );
+        }
+        
+        // Update titles based on context (this part was already good)
         if (currentlyViewedNotebookId) {
             const currentNb = localNotebooksCache.find(nb => nb.id === currentlyViewedNotebookId);
             if(allNotesPageTitle) allNotesPageTitle.textContent = `Notes in "${currentNb ? currentNb.title : 'Selected Notebook'}"`;
@@ -2067,21 +2051,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
 
-        if (localNotesCache.length === 0 && noMoreNotesToLoad) { 
-            if (currentFilterTag) noNotesMessagePreviewEl.textContent = `No notes with tag "${currentFilterTag}".`; 
-            else if (isFavoritesViewActive) noNotesMessagePreviewEl.textContent = 'No favorite notes.'; 
-            else if (currentlyViewedNotebookId) noNotesMessagePreviewEl.textContent = 'No notes in this notebook.'; 
-            else noNotesMessagePreviewEl.textContent = 'No notes yet.'; 
+        if (filteredNotesForDisplay.length === 0) { 
+            if (currentSearchTerm && localNotesCache.length > 0) { // Notes exist but search yielded no results
+                 noNotesMessagePreviewEl.textContent = `No notes match your search for "${currentSearchTerm}".`;
+            } else if (currentFilterTag) {
+                 noNotesMessagePreviewEl.textContent = `No notes with tag "${currentFilterTag}".`; 
+            } else if (isFavoritesViewActive) {
+                 noNotesMessagePreviewEl.textContent = 'No favorite notes.'; 
+            } else if (currentlyViewedNotebookId) {
+                 noNotesMessagePreviewEl.textContent = 'No notes in this notebook.'; 
+            } else {
+                 noNotesMessagePreviewEl.textContent = 'No notes yet. Create one!'; 
+            }
             notesListScrollableArea.appendChild(noNotesMessagePreviewEl); 
             noNotesMessagePreviewEl.style.display = 'block'; 
-            if (!isNewNoteSessionInPanel && !activelyCreatingNoteId && !currentInteractingNoteIdInPanel && themeSettings.viewMode === 'compact') clearInteractionPanel(false); 
+            if (!isNewNoteSessionInPanel && !activelyCreatingNoteId && !currentInteractingNoteIdInPanel && themeSettings.viewMode === 'compact') {
+                clearInteractionPanel(false); 
+            }
             return; 
         } 
         noNotesMessagePreviewEl.style.display = 'none'; 
         
-        notesToDisplay.sort((a,b) => (b.modifiedAt?.toMillis?.() || new Date(b.modifiedAt).getTime()) - (a.modifiedAt?.toMillis?.() || new Date(a.modifiedAt).getTime()));
+        // Sort the filtered notes for display
+        filteredNotesForDisplay.sort((a,b) => (b.modifiedAt?.toMillis?.() || new Date(b.modifiedAt).getTime()) - (a.modifiedAt?.toMillis?.() || new Date(a.modifiedAt).getTime()));
         
-        notesToDisplay.forEach(note => { 
+        filteredNotesForDisplay.forEach(note => { 
             const notebook = localNotebooksCache.find(nb => nb.id === note.notebookId); 
             const previewEl = document.createElement('div'); 
             previewEl.className = 'note-preview-card'; 
@@ -2118,16 +2112,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const favoriteIcon = document.createElement('i'); 
             favoriteIcon.className = note.isFavorite ? 'fas fa-star' : 'far fa-star';
             
-            // Corrected reference from previewEl to currentPreviewEl for selected state styling
-            const currentPreviewElForStyle = previewEl; // Use the current previewEl for styling logic
-
             if (isCurrentlyTheInteractingNote && themeSettings.viewMode === 'compact') { 
-                currentPreviewElForStyle.classList.add('selected'); 
+                previewEl.classList.add('selected'); 
                 favoriteIcon.style.color = note.isFavorite ? '#FBBF24' : '#FFFFFF'; 
                 deleteIcon.style.color = '#f87171'; 
             } else { 
-                currentPreviewElForStyle.classList.remove('selected'); 
-                currentPreviewElForStyle.style.backgroundColor = noteBgColor; 
+                previewEl.classList.remove('selected'); 
+                previewEl.style.backgroundColor = noteBgColor; 
                 const calculatedTextColor = getTextColorForBackground(noteBgColor); 
                 h4El.style.color = calculatedTextColor; 
                 pContentEl.style.color = calculatedTextColor; 
@@ -2135,11 +2126,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 favoriteIcon.style.color = note.isFavorite ? '#FBBF24' : '#a0aec0'; 
                 deleteIcon.style.color = '#ef4444'; 
             } 
-            currentPreviewElForStyle.setAttribute('data-note-id', note.id); 
+            previewEl.setAttribute('data-note-id', note.id); 
             let previewHTML = '<em>No content</em>'; 
             if (note.text && note.text.trim() !== "") { 
                 const lines = note.text.split('\n'); 
-                const maxLines = currentPreviewElForStyle.classList.contains('grid-card-style') ? 5 : 3; 
+                const maxLines = previewEl.classList.contains('grid-card-style') ? 5 : 3; 
                 const linesToDisplay = lines.slice(0, maxLines); 
                 previewHTML = linesToDisplay.map(line => line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")).join('<br>'); 
                 if (lines.length > maxLines) previewHTML += '...'; 
@@ -2154,12 +2145,12 @@ document.addEventListener('DOMContentLoaded', () => {
             noteActionsDiv.appendChild(deleteDiv); 
             noteActionsDiv.appendChild(favoriteDiv); 
 
-            currentPreviewElForStyle.appendChild(h4El); 
-            currentPreviewElForStyle.appendChild(pContentEl); 
-            currentPreviewElForStyle.appendChild(pNotebookEl); 
-            currentPreviewElForStyle.appendChild(noteActionsDiv); 
+            previewEl.appendChild(h4El); 
+            previewEl.appendChild(pContentEl); 
+            previewEl.appendChild(pNotebookEl); 
+            previewEl.appendChild(noteActionsDiv); 
             
-            currentPreviewElForStyle.addEventListener('click', (e) => { 
+            previewEl.addEventListener('click', (e) => { 
                 if (e.target.closest('.favorite-star') || e.target.closest('.delete-note-icon')) return; 
                 
                 if (themeSettings.viewMode === 'comfortable') {
@@ -2175,7 +2166,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (noteToToggle) { 
                     const newFavStatus = !noteToToggle.isFavorite; 
                     try { 
-                        const noteDocPath = `${userAppMemoirBasePath}/notebooks/${noteToToggle.notebookId}/notes/${note.id}`;
+                        const noteDocPath = `${userAppMemoirDocPath}/notebooks/${noteToToggle.notebookId}/notes/${note.id}`;
                         await updateDoc(doc(db, noteDocPath), { isFavorite: newFavStatus }); 
                     } catch (err) { console.error("Error updating favorite:", err); alert("Could not update favorite."); } 
                 } 
@@ -2184,10 +2175,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 e.stopPropagation();
                 moveNoteToTrashImmediately(note.id, note.notebookId, note.title); 
             });
-            notesListScrollableArea.appendChild(currentPreviewElForStyle); 
+            notesListScrollableArea.appendChild(previewEl); 
         }); 
 
-        if (noMoreNotesToLoad && localNotesCache.length > 0) {
+        if (noMoreNotesToLoad && filteredNotesForDisplay.length > 0 && !currentSearchTerm) { // Show "end of notes" only if not searching and all loaded
             const endMessage = document.createElement('p');
             endMessage.className = 'text-center text-gray-400 py-4 text-sm';
             endMessage.textContent = 'End of notes.';
@@ -2209,7 +2200,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const tagColor = tagObj.color || DEFAULT_TAG_COLOR; 
             const textColor = getTextColorForBackground(tagColor); 
             tagCard.style.backgroundColor = tagColor; 
-            let notesWithThisTagCount = localNotesCache.filter(note => note.userId === PLACEHOLDER_USER_ID && note.tags && note.tags.some(t => t.name === tagObj.name)).length; 
+            
+            // Count notes with this tag from the currently loaded localNotesCache for display purposes
+            let notesWithThisTagCount = 0;
+            if (localNotesCache && localNotesCache.length > 0) {
+                notesWithThisTagCount = localNotesCache.filter(note => note.tags && note.tags.some(t => t.name === tagObj.name)).length;
+            }
+            
             tagCard.innerHTML = `
                 <div class="tag-item-header">
                     <h4 class="tag-name" style="color: ${textColor};">${tagObj.name}</h4>
@@ -2228,7 +2225,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 isFavoritesViewActive = false; 
                 clearInteractionPanel(true); 
                 switchToMainView('notes'); 
-                setupNotesListenerAndLoadInitialBatch();
+                setupNotesListenerAndLoadInitialBatch(); // This will also handle search bar visibility
             });
             tagCard.querySelector('.edit-tag-icon-btn').addEventListener('click', (e) => { 
                 e.stopPropagation(); 
@@ -2254,7 +2251,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function updateGlobalTagsFromNoteInput(tagNamesArray) { 
         if (!tagNamesArray || tagNamesArray.length === 0) return [];
         const newTagObjectsForNote = [];
-        const tagsCollectionPath = `${userAppMemoirBasePath}/tags`;
+        const tagsCollectionPath = `${userAppMemoirDocPath}/tags`;
 
         for (const rawTagName of tagNamesArray) {
             const tagName = rawTagName.toLowerCase().trim(); 
@@ -2263,7 +2260,7 @@ document.addEventListener('DOMContentLoaded', () => {
             let existingTag = localTagsCache.find(t => t.name === tagName); 
             
             if (!existingTag) { 
-                const tagQuery = query(collection(db, tagsCollectionPath), where("name", "==", tagName), where("userId", "==", PLACEHOLDER_USER_ID), limit(1)); 
+                const tagQuery = query(collection(db, tagsCollectionPath), where("name", "==", tagName), limit(1)); 
                 const querySnapshot = await getDocs(tagQuery);
                 if (!querySnapshot.empty) {
                     existingTag = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() };
@@ -2309,7 +2306,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     createdAt: serverTimestamp(), modifiedAt: serverTimestamp(),
                     activity: activityValue || "", edits: [], isFavorite: false 
                 };
-                const notesCollectionPath = `${userAppMemoirBasePath}/notebooks/${currentOpenNotebookIdForPanel}/notes`;
+                const notesCollectionPath = `${userAppMemoirDocPath}/notebooks/${currentOpenNotebookIdForPanel}/notes`;
                 const docRef = await addDoc(collection(db, notesCollectionPath), newNoteData);
                 currentInteractingNoteIdInPanel = docRef.id; 
                 activelyCreatingNoteId = docRef.id; 
@@ -2321,15 +2318,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 lastSavedNoteTagsInPanel = currentNoteTagsArrayInPanel.slice().sort().join(',');
                 lastSavedNoteActivityInPanel = newNoteData.activity || '';
                 
-                const parentNotebookDocPath = `${userAppMemoirBasePath}/notebooks/${currentOpenNotebookIdForPanel}`;
+                const parentNotebookDocPath = `${userAppMemoirDocPath}/notebooks/${currentOpenNotebookIdForPanel}`;
                 const parentNotebookRef = doc(db, parentNotebookDocPath);
                 const parentNotebookSnap = await getDoc(parentNotebookRef);
                 if (parentNotebookSnap.exists()) {
                     await updateDoc(parentNotebookRef, { notesCount: (parentNotebookSnap.data().notesCount || 0) + 1 });
                 }
-                
-                // Visibility for "My edits" is now handled by displayNoteInInteractionPanel's input listener
-                // for *existing* notes. New notes won't show it immediately.
 
             } catch (e) { console.error("Error creating new note:", e); alert("Failed to save new note."); }
         } else if (currentInteractingNoteIdInPanel && existingNoteData) { 
@@ -2339,7 +2333,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (selectedNotebookIdInPanel && originalNotebookIdOfNote && selectedNotebookIdInPanel !== originalNotebookIdOfNote) {
                 showLoadingOverlay("Moving note...");
                 try {
-                    const noteToMoveRef = doc(db, `${userAppMemoirBasePath}/notebooks/${originalNotebookIdOfNote}/notes/${currentInteractingNoteIdInPanel}`);
+                    const noteToMoveRef = doc(db, `${userAppMemoirDocPath}/notebooks/${originalNotebookIdOfNote}/notes/${currentInteractingNoteIdInPanel}`);
                     const noteSnap = await getDoc(noteToMoveRef);
                     if (!noteSnap.exists()) throw new Error("Note to move not found.");
                     const noteDataToMove = noteSnap.data();
@@ -2347,16 +2341,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     const wasThisTheActivelyCreatedNote = (activelyCreatingNoteId === currentInteractingNoteIdInPanel);
 
                     const batch = writeBatch(db);
-                    const newNoteRefAfterMove = doc(collection(db, `${userAppMemoirBasePath}/notebooks/${selectedNotebookIdInPanel}/notes`)); 
+                    const newNoteRefAfterMove = doc(collection(db, `${userAppMemoirDocPath}/notebooks/${selectedNotebookIdInPanel}/notes`)); 
                     batch.set(newNoteRefAfterMove, { ...noteDataToMove, userId: PLACEHOLDER_USER_ID, notebookId: selectedNotebookIdInPanel, title: title || noteDataToMove.title, text, tags: processedTagsForNote, modifiedAt: serverTimestamp() });
                     batch.delete(noteToMoveRef);
                     
-                    const oldNotebookDocPath = `${userAppMemoirBasePath}/notebooks/${originalNotebookIdOfNote}`;
+                    const oldNotebookDocPath = `${userAppMemoirDocPath}/notebooks/${originalNotebookIdOfNote}`;
                     const oldNotebookRef = doc(db, oldNotebookDocPath);
                     const oldNotebookSnap = await getDoc(oldNotebookRef); 
                     if(oldNotebookSnap.exists()) batch.update(oldNotebookRef, { notesCount: Math.max(0, (oldNotebookSnap.data().notesCount || 0) - 1) });
                     
-                    const newNotebookDocPath = `${userAppMemoirBasePath}/notebooks/${selectedNotebookIdInPanel}`;
+                    const newNotebookDocPath = `${userAppMemoirDocPath}/notebooks/${selectedNotebookIdInPanel}`;
                     const newNotebookRefDoc = doc(db, newNotebookDocPath); 
                     const newNotebookSnap = await getDoc(newNotebookRefDoc); 
                     if(newNotebookSnap.exists()) batch.update(newNotebookRefDoc, { notesCount: (newNotebookSnap.data().notesCount || 0) + 1 });
@@ -2434,10 +2428,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (contentActuallyChanged) {
                     updates.modifiedAt = serverTimestamp();
                     try {
-                        const noteDocPath = `${userAppMemoirBasePath}/notebooks/${originalNotebookIdOfNote}/notes/${currentInteractingNoteIdInPanel}`;
+                        const noteDocPath = `${userAppMemoirDocPath}/notebooks/${originalNotebookIdOfNote}/notes/${currentInteractingNoteIdInPanel}`;
                         const noteToUpdateRef = doc(db, noteDocPath);
                         await updateDoc(noteToUpdateRef, updates);
-                        console.log("Note updated with changes:", updates);
                         if (updates.title !== undefined) lastSavedNoteTitleInPanel = updates.title;
                         if (updates.text !== undefined) lastSavedNoteTextInPanel = updates.text;
                         if (updates.tags !== undefined) lastSavedNoteTagsInPanel = currentTagsString;
@@ -2446,8 +2439,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         console.error("Error updating note:", e);
                         alert("Failed to save note changes.");
                     }
-                } else {
-                    console.log("No actual content changes detected for note, skipping Firestore write.");
                 }
             }
         }
@@ -2535,14 +2526,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function initializeDefaultNotebookFirestore() { 
         const defaultNotebookName = "My Notes 😏";
-        const notebooksCollectionPath = `${userAppMemoirBasePath}/notebooks`;
+        
+        const memoirAppDocRef = doc(db, userAppMemoirDocPath);
+        try {
+            await setDoc(memoirAppDocRef, { userId: PLACEHOLDER_USER_ID, appName: "Memoir Notes", initializedAt: serverTimestamp() }, { merge: true });
+        } catch (e) {
+            console.error(`Error ensuring main app document '${MEMOIR_DOCUMENT_NAME}' exists:`, e);
+            return; 
+        }
+
+        const notebooksCollectionPath = `${userAppMemoirDocPath}/notebooks`;
         const existingDefaultQuery = query(collection(db, notebooksCollectionPath), where("title", "==", defaultNotebookName), where("userId", "==", PLACEHOLDER_USER_ID)); 
         const querySnapshot = await getDocs(existingDefaultQuery); 
+
         if (querySnapshot.empty) { 
             try { 
-                const memoirDocRef = doc(db, userAppMemoirBasePath);
-                await setDoc(memoirDocRef, { userId: PLACEHOLDER_USER_ID, appIdentifier: "MemoirNotesApp" }, { merge: true }); // Ensure Memoir doc exists
-
                 await addDoc(collection(db, notebooksCollectionPath), { 
                     userId: PLACEHOLDER_USER_ID,
                     title: defaultNotebookName, 
@@ -2720,14 +2718,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 noteDataToRestore.modifiedAt = serverTimestamp(); 
 
                 const batch = writeBatch(db);
-                const newNotePath = `${userAppMemoirBasePath}/notebooks/${noteDataToRestore.notebookId}/notes`;
+                const newNotePath = `${userAppMemoirDocPath}/notebooks/${noteDataToRestore.notebookId}/notes`;
                 const newNoteRef = doc(collection(db, newNotePath));
                 batch.set(newNoteRef, noteDataToRestore);
                 
-                const deletedNoteDocPath = `${userAppMemoirBasePath}/deleted_notes/${deletedNoteId}`;
+                const deletedNoteDocPath = `${userAppMemoirDocPath}/deleted_notes/${deletedNoteId}`;
                 batch.delete(doc(db, deletedNoteDocPath));
                 
-                const notebookDocPath = `${userAppMemoirBasePath}/notebooks/${noteDataToRestore.notebookId}`;
+                const notebookDocPath = `${userAppMemoirDocPath}/notebooks/${noteDataToRestore.notebookId}`;
                 const notebookRef = doc(db, notebookDocPath);
                 const notebookSnap = await getDoc(notebookRef);
                 if (notebookSnap.exists()) {
@@ -2780,7 +2778,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showLoadingOverlay("Creating notebook and restoring note...");
             try {
                 const newNotebookTitle = noteToRestoreWithOptions.originalNotebookName || "Restored Notes";
-                const notebooksCollectionPath = `${userAppMemoirBasePath}/notebooks`;
+                const notebooksCollectionPath = `${userAppMemoirDocPath}/notebooks`;
                 let targetNotebookId = localNotebooksCache.find(nb => nb.title === newNotebookTitle)?.id;
 
                 if (!targetNotebookId) {
@@ -2806,14 +2804,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 noteDataToRestore.modifiedAt = serverTimestamp();
 
                 const batch = writeBatch(db);
-                const newNotePath = `${userAppMemoirBasePath}/notebooks/${targetNotebookId}/notes`;
+                const newNotePath = `${userAppMemoirDocPath}/notebooks/${targetNotebookId}/notes`;
                 const newNoteRef = doc(collection(db, newNotePath));
                 batch.set(newNoteRef, noteDataToRestore);
 
-                const deletedNoteDocPath = `${userAppMemoirBasePath}/deleted_notes/${noteToRestoreWithOptions.id}`;
+                const deletedNoteDocPath = `${userAppMemoirDocPath}/deleted_notes/${noteToRestoreWithOptions.id}`;
                 batch.delete(doc(db, deletedNoteDocPath));
                 
-                const notebookDocPath = `${userAppMemoirBasePath}/notebooks/${targetNotebookId}`;
+                const notebookDocPath = `${userAppMemoirDocPath}/notebooks/${targetNotebookId}`;
                 const notebookRef = doc(db, notebookDocPath);
                 const notebookSnap = await getDoc(notebookRef);
                 if (notebookSnap.exists()) {
@@ -2847,14 +2845,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 noteDataToRestore.modifiedAt = serverTimestamp();
 
                 const batch = writeBatch(db);
-                const newNotePath = `${userAppMemoirBasePath}/notebooks/${targetNotebookId}/notes`;
+                const newNotePath = `${userAppMemoirDocPath}/notebooks/${targetNotebookId}/notes`;
                 const newNoteRef = doc(collection(db, newNotePath));
                 batch.set(newNoteRef, noteDataToRestore);
 
-                const deletedNoteDocPath = `${userAppMemoirBasePath}/deleted_notes/${noteToRestoreWithOptions.id}`;
+                const deletedNoteDocPath = `${userAppMemoirDocPath}/deleted_notes/${noteToRestoreWithOptions.id}`;
                 batch.delete(doc(db, deletedNoteDocPath));
                 
-                const notebookDocPath = `${userAppMemoirBasePath}/notebooks/${targetNotebookId}`;
+                const notebookDocPath = `${userAppMemoirDocPath}/notebooks/${targetNotebookId}`;
                 const notebookRef = doc(db, notebookDocPath);
                 const notebookSnap = await getDoc(notebookRef);
                 if (notebookSnap.exists()) {
@@ -2887,7 +2885,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showLoadingOverlay("Emptying Trash...");
             try {
                 const batch = writeBatch(db);
-                const deletedNotesCollectionPath = `${userAppMemoirBasePath}/deleted_notes`;
+                const deletedNotesCollectionPath = `${userAppMemoirDocPath}/deleted_notes`;
                 localDeletedNotesCache.forEach(note => {
                     batch.delete(doc(db, deletedNotesCollectionPath, note.id));
                 });
@@ -2945,7 +2943,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error("Selected notebook not found in local cache.");
                 }
 
-                const notesCollectionRef = collection(db, `${userAppMemoirBasePath}/notebooks/${selectedNotebookId}/notes`);
+                const notesCollectionRef = collection(db, `${userAppMemoirDocPath}/notebooks/${selectedNotebookId}/notes`);
                 const notesSnapshot = await getDocs(notesCollectionRef);
                 const notesForExport = [];
                 notesSnapshot.forEach(noteDoc => {
@@ -3002,12 +3000,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // Initial setup based on default homepage
     if (themeSettings.defaultHomepage === 'notes' || themeSettings.defaultHomepage === 'favorites') {
-        setupNotesListenerAndLoadInitialBatch();
-    } else if (notesContentDiv && notesContentDiv.classList.contains('main-view-content-active') && !currentlyViewedNotebookId && !currentFilterTag && !isFavoritesViewActive) {
-        setupNotesListenerAndLoadInitialBatch();
+        // setupNotesListenerAndLoadInitialBatch is called within initializeDataListeners -> onSnapshot for appSettings
     } else {
-        renderAllNotesPreviews(); 
+        // For other default views, ensure previews are rendered if applicable (though usually handled by switchToMainView)
+        if (notebooksContentDiv && notebooksContentDiv.classList.contains('main-view-content-active')) {
+            renderNotebooksOnPage();
+        }
     }
     renderTagsInSettings(); 
     clearInteractionPanel(false); 
