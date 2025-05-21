@@ -1,4 +1,4 @@
-// core-logic.js (v6.0.1)
+// core-logic.js (v6.0.2 - Autosave Status Integration)
 
 // Import Firebase SDKs
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js";
@@ -110,6 +110,7 @@ let uiRefreshCallbacks = {
     hideLoadingOverlay: () => console.warn("uiRefreshCallbacks.hideLoadingOverlay not implemented"),
     showLoadingOverlay: (msg) => console.warn("uiRefreshCallbacks.showLoadingOverlay not implemented for msg:", msg),
     updateViewModeRadios: () => console.warn("uiRefreshCallbacks.updateViewModeRadios not implemented"),
+    updateAutosaveStatus: (status, message) => console.warn("uiRefreshCallbacks.updateAutosaveStatus not implemented for:", status, message),
 };
 
 function setUIRefreshCallbacks(callbacks) {
@@ -200,7 +201,7 @@ async function fetchMoreNotes() {
     try {
         const querySnapshot = await getDocs(nextQuery);
         const newNotesBatch = [];
-        querySnapshot.forEach((noteDoc) => { /* ... populate newNotesBatch ... */ 
+        querySnapshot.forEach((noteDoc) => { 
             const data = noteDoc.data();
             newNotesBatch.push({ 
                 id: noteDoc.id, ...data, userId: data.userId || PLACEHOLDER_USER_ID,
@@ -258,7 +259,7 @@ async function initializeDataListeners() {
                  setupNotesListenerAndLoadInitialBatch(); 
             }
             uiRefreshCallbacks.hideLoadingOverlay();
-        }, (error) => { /* ... error handling ... */ 
+        }, (error) => { 
             console.error("Error fetching app settings:", error);
             themeSettings = { ...initialThemeSettings }; paletteColors = [...initialPaletteColors]; defaultThemeColorsFromDB = [...initialDefaultThemeColors];
             uiRefreshCallbacks.applyThemeSettings(); uiRefreshCallbacks.renderPaletteColors(); uiRefreshCallbacks.updatePaletteLimitMessage();
@@ -297,32 +298,32 @@ async function initializeDataListeners() {
 }
 
 // --- Data Manipulation Functions ---
-async function saveAppSettings(settingsToSave) { /* ... same as before ... */ 
+async function saveAppSettings(settingsToSave) { 
     try {
         const appSettingsPath = `${userAppMemoirDocPath}/app_settings/user_specific_settings`;
         await setDoc(doc(db, appSettingsPath), settingsToSave, { merge: true });
     } catch (e) { console.error("Error saving app settings:", e); alert("Failed to save settings."); }
 }
-async function createNotebook(newNotebookData) { /* ... same as before ... */ 
+async function createNotebook(newNotebookData) { 
     try { 
         const notebooksCollectionPath = `${userAppMemoirDocPath}/notebooks`;
         await addDoc(collection(db, notebooksCollectionPath), newNotebookData); 
     } catch (e) { console.error("Error adding notebook: ", e); alert("Failed to create notebook."); } 
 }
-async function updateNotebook(notebookId, updates) { /* ... same as before ... */ 
+async function updateNotebook(notebookId, updates) { 
     try {
         const notebookDocPath = `${userAppMemoirDocPath}/notebooks/${notebookId}`;
         await updateDoc(doc(db, notebookDocPath), updates);
     } catch (e) { console.error("Error updating notebook: ", e); alert("Failed to update notebook."); }
 }
-async function performActualNotebookDeletion(notebookId, notebookName) { /* ... same as before, ensure UI callbacks are used ... */ 
+async function performActualNotebookDeletion(notebookId, notebookName) { 
     uiRefreshCallbacks.showLoadingOverlay(`Moving notes from "${notebookName}" to Trash...`);
     try {
         const batch = writeBatch(db);
         const notesInNotebookRef = collection(db, `${userAppMemoirDocPath}/notebooks/${notebookId}/notes`);
         const notesSnapshot = await getDocs(notesInNotebookRef);
         const notesToMoveIds = []; let tagsFromMovedNotes = new Set();
-        notesSnapshot.forEach(noteDoc => { /* ... */ 
+        notesSnapshot.forEach(noteDoc => { 
             const noteData = noteDoc.data();
             const deletedNoteData = { ...noteData, originalNoteId: noteDoc.id, originalNotebookId: notebookId, originalNotebookName: notebookName, deletedAt: serverTimestamp() };
             const deletedNotesCollectionPath = `${userAppMemoirDocPath}/deleted_notes`;
@@ -348,7 +349,7 @@ async function performActualNotebookDeletion(notebookId, notebookName) { /* ... 
     } catch (e) { console.error(`Error deleting notebook: `, e); alert(`Failed to delete notebook. Error: ${e.message}`);
     } finally { uiRefreshCallbacks.hideLoadingOverlay(); }
 }
-async function performActualNoteAction() { /* ... same as before ... */ 
+async function performActualNoteAction() { 
     if (!noteActionContext.id || noteActionContext.type !== 'deletePermanently') return;
     uiRefreshCallbacks.showLoadingOverlay("Deleting Permanently...");
     if (noteActionContext.isDeletedNote) { 
@@ -358,7 +359,7 @@ async function performActualNoteAction() { /* ... same as before ... */
     }
     uiRefreshCallbacks.hideLoadingOverlay();
 }
-async function moveNoteToTrashImmediately(noteId, notebookId, noteTitle) { /* ... same as before ... */ 
+async function moveNoteToTrashImmediately(noteId, notebookId, noteTitle) { 
     if (!noteId || !notebookId) { console.error("IDs missing for move to trash."); return; }
     uiRefreshCallbacks.showLoadingOverlay("Moving to Trash...");
     try {
@@ -382,7 +383,7 @@ async function moveNoteToTrashImmediately(noteId, notebookId, noteTitle) { /* ..
     } catch (e) { console.error("Error moving note to trash:", e); alert("Failed to move note."); 
     } finally { uiRefreshCallbacks.hideLoadingOverlay(); }
 }
-async function saveTagChanges(tagId, originalName, newName, newColor, newPurpose) { /* ... same as before ... */ 
+async function saveTagChanges(tagId, originalName, newName, newColor, newPurpose) { 
     const tagDocPath = `${userAppMemoirDocPath}/tags/${tagId}`;
     try { 
         await updateDoc(doc(db, tagDocPath), { name: newName, color: newColor, purpose: newPurpose, userId: PLACEHOLDER_USER_ID }); 
@@ -398,7 +399,7 @@ async function saveTagChanges(tagId, originalName, newName, newColor, newPurpose
         } 
     } catch (e) { console.error("Error updating tag:", e); alert("Failed to update tag."); } 
 }
-async function performActualTagDeletion(tagId, tagName) { /* ... same as before ... */ 
+async function performActualTagDeletion(tagId, tagName) { 
     if (!tagId || !tagName) return; 
     uiRefreshCallbacks.showLoadingOverlay("Deleting tag..."); 
     const tagNameLower = tagName.toLowerCase();
@@ -415,7 +416,7 @@ async function performActualTagDeletion(tagId, tagName) { /* ... same as before 
     } catch (e) { console.error("Error deleting tag: ", e); alert("Failed to delete tag."); 
     } finally { uiRefreshCallbacks.hideLoadingOverlay(); tagToDeleteGlobally = { id: null, name: null }; } 
 }
-async function checkAndCleanupOrphanedTag(tagName) { /* ... same as before ... */ 
+async function checkAndCleanupOrphanedTag(tagName) { 
     if (!tagName) return; const tagNameLower = tagName.toLowerCase();
     const notesWithTagQuery = query(collectionGroup(db, "notes"), where("userId", "==", PLACEHOLDER_USER_ID), where("tags", "array-contains", { name: tagNameLower }), limit(1));
     try {
@@ -427,9 +428,10 @@ async function checkAndCleanupOrphanedTag(tagName) { /* ... same as before ... *
         }
     } catch (e) { console.error(`Error cleaning orphaned tag "${tagNameLower}":`, e); }
 }
-async function saveCurrentEditDescription() { /* ... same as before, with guard clause ... */ 
+async function saveCurrentEditDescription() { 
     if (!currentInteractingNoteIdInPanel || isNewNoteSessionInPanel || !currentInteractingNoteOriginalNotebookId) return;
     if (!currentEditSessionOpenTimePanel) { console.warn("saveCurrentEditDescription: currentEditSessionOpenTimePanel is null."); return; }
+    uiRefreshCallbacks.updateAutosaveStatus('saving', 'Saving edit details...');
     const editsDescription = document.getElementById('interactionPanelEditsMadeInputField')?.value.trim() || "";
     const noteRef = doc(db, `${userAppMemoirDocPath}/notebooks/${currentInteractingNoteOriginalNotebookId}/notes/${currentInteractingNoteIdInPanel}`);
     try {
@@ -448,10 +450,14 @@ async function saveCurrentEditDescription() { /* ... same as before, with guard 
             }
             if (entryModified) transaction.update(noteRef, { edits: existingEdits, modifiedAt: serverTimestamp() });
         });
-    } catch (e) { console.error("Error in saveCurrentEditDescription transaction:", e); }
+        uiRefreshCallbacks.updateAutosaveStatus('saved', 'Edit details saved');
+    } catch (e) { 
+        console.error("Error in saveCurrentEditDescription transaction:", e); 
+        uiRefreshCallbacks.updateAutosaveStatus('error', 'Edit details save failed');
+    }
 }
 const debouncedSaveEditDescription = debounce(saveCurrentEditDescription, 2500);
-async function updateGlobalTagsFromNoteInput(tagNamesArray) { /* ... same as before ... */ 
+async function updateGlobalTagsFromNoteInput(tagNamesArray) { 
     if (!tagNamesArray || tagNamesArray.length === 0) return []; const newTagObjectsForNote = [];
     const tagsCollectionPath = `${userAppMemoirDocPath}/tags`;
     for (const rawTagName of tagNamesArray) {
@@ -472,7 +478,8 @@ async function updateGlobalTagsFromNoteInput(tagNamesArray) { /* ... same as bef
     } 
     return newTagObjectsForNote; 
 }
-async function handleNoteInputChange() { /* ... same as before, ensure DOM gets are safe ... */ 
+async function handleNoteInputChange() { 
+    uiRefreshCallbacks.updateAutosaveStatus('saving'); // Indicate saving is starting
     const title = document.getElementById('noteTitleInputField_panel')?.value.trim() || "";
     const text = document.getElementById('noteTextInputField_panel')?.value || "";
     const activityValue = document.getElementById('interactionPanelActivityInputField')?.value.trim() || null;
@@ -480,7 +487,10 @@ async function handleNoteInputChange() { /* ... same as before, ensure DOM gets 
     const processedTagsForNote = currentNoteTagsArrayInPanel.map(name => ({ name }));
 
     if (isNewNoteSessionInPanel && !currentInteractingNoteIdInPanel) { 
-        if (title === "" && text.trim() === "" && (!activityValue || activityValue === "") && currentNoteTagsArrayInPanel.length === 0) return; 
+        if (title === "" && text.trim() === "" && (!activityValue || activityValue === "") && currentNoteTagsArrayInPanel.length === 0) {
+            uiRefreshCallbacks.updateAutosaveStatus('initial'); // Or hide if nothing to save
+            return; 
+        }
         try {
             const newNoteData = { userId: PLACEHOLDER_USER_ID, notebookId: currentOpenNotebookIdForPanel, title: title || "Untitled Note", text, tags: processedTagsForNote, createdAt: serverTimestamp(), modifiedAt: serverTimestamp(), activity: activityValue || "", edits: [], isFavorite: false };
             const docRef = await addDoc(collection(db, `${userAppMemoirDocPath}/notebooks/${currentOpenNotebookIdForPanel}/notes`), newNoteData);
@@ -489,12 +499,13 @@ async function handleNoteInputChange() { /* ... same as before, ensure DOM gets 
             const parentNotebookRef = doc(db, `${userAppMemoirDocPath}/notebooks/${currentOpenNotebookIdForPanel}`);
             const parentNotebookSnap = await getDoc(parentNotebookRef);
             if (parentNotebookSnap.exists()) await updateDoc(parentNotebookRef, { notesCount: (parentNotebookSnap.data().notesCount || 0) + 1 });
-        } catch (e) { console.error("Error creating new note:", e); alert("Failed to save new note."); }
+            uiRefreshCallbacks.updateAutosaveStatus('saved');
+        } catch (e) { console.error("Error creating new note:", e); alert("Failed to save new note."); uiRefreshCallbacks.updateAutosaveStatus('error', 'Failed to create note');}
     } else if (currentInteractingNoteIdInPanel && existingNoteData) { 
         const selectedNotebookIdInPanel = document.getElementById('panelNotebookSelector')?.value; 
         const originalNotebookIdOfNote = currentInteractingNoteOriginalNotebookId; 
         if (selectedNotebookIdInPanel && originalNotebookIdOfNote && selectedNotebookIdInPanel !== originalNotebookIdOfNote) {
-            uiRefreshCallbacks.showLoadingOverlay("Moving note...");
+            uiRefreshCallbacks.updateAutosaveStatus('saving', 'Moving note...');
             try {
                 const noteToMoveRef = doc(db, `${userAppMemoirDocPath}/notebooks/${originalNotebookIdOfNote}/notes/${currentInteractingNoteIdInPanel}`);
                 const noteSnap = await getDoc(noteToMoveRef); if (!noteSnap.exists()) throw new Error("Note to move not found.");
@@ -511,9 +522,10 @@ async function handleNoteInputChange() { /* ... same as before, ensure DOM gets 
                 currentInteractingNoteIdInPanel = newNoteRefAfterMove.id; currentInteractingNoteOriginalNotebookId = selectedNotebookIdInPanel; currentOpenNotebookIdForPanel = selectedNotebookIdInPanel;
                 if (wasThisTheActivelyCreatedNote) activelyCreatingNoteId = newNoteRefAfterMove.id; else activelyCreatingNoteId = null; 
                 isNewNoteSessionInPanel = false; 
-                // UI will handle confirmation and re-display
-            } catch (e) { console.error("Error moving note:", e); alert("Failed to move note."); 
-            } finally { uiRefreshCallbacks.hideLoadingOverlay(); }
+                uiRefreshCallbacks.updateAutosaveStatus('saved', 'Note moved');
+                // UI handler should call displayNoteInInteractionPanel
+            } catch (e) { console.error("Error moving note:", e); alert("Failed to move note."); uiRefreshCallbacks.updateAutosaveStatus('error', 'Failed to move note');
+            } finally { uiRefreshCallbacks.hideLoadingOverlay(); /* Already called by showLoadingOverlay */ }
         } else { 
             const updates = {}; let contentActuallyChanged = false;
             if (title !== lastSavedNoteTitleInPanel) { updates.title = title; contentActuallyChanged = true; }
@@ -547,7 +559,10 @@ async function handleNoteInputChange() { /* ... same as before, ensure DOM gets 
                     if (updates.text !== undefined) lastSavedNoteTextInPanel = updates.text;
                     if (updates.tags !== undefined) lastSavedNoteTagsInPanel = currentTagsString;
                     if (updates.activity !== undefined) lastSavedNoteActivityInPanel = updates.activity;
-                } catch (e) { console.error("Error updating note:", e); alert("Failed to save changes."); }
+                    uiRefreshCallbacks.updateAutosaveStatus('saved');
+                } catch (e) { console.error("Error updating note:", e); alert("Failed to save changes."); uiRefreshCallbacks.updateAutosaveStatus('error', 'Failed to save');}
+            } else {
+                uiRefreshCallbacks.updateAutosaveStatus('saved', 'No changes to save'); // Or just hide
             }
         }
     }
@@ -557,7 +572,7 @@ async function handleNoteInputChange() { /* ... same as before, ensure DOM gets 
     if (tagsToCheckForOrphan.length > 0) for (const tagName of tagsToCheckForOrphan) await checkAndCleanupOrphanedTag(tagName);
 }
 const debouncedHandleInteractionPanelInputChange = debounce(handleNoteInputChange, 1200); 
-async function initializeDefaultNotebookFirestore() { /* ... same as before ... */ 
+async function initializeDefaultNotebookFirestore() { 
     const defaultNotebookName = "My Notes 😏";
     const memoirAppDocRef = doc(db, userAppMemoirDocPath);
     try { await setDoc(memoirAppDocRef, { userId: PLACEHOLDER_USER_ID, appName: "Memoir Notes", initializedAt: serverTimestamp() }, { merge: true }); } 
@@ -569,7 +584,7 @@ async function initializeDefaultNotebookFirestore() { /* ... same as before ... 
         catch (e) { console.error(`Error creating default notebook:`, e); } 
     } 
 }
-async function handleRestoreNote(deletedNoteId, targetNotebookId = null, newNotebookTitle = null) { /* ... same as before ... */ 
+async function handleRestoreNote(deletedNoteId, targetNotebookId = null, newNotebookTitle = null) { 
     const noteToRestore = localDeletedNotesCache.find(dn => dn.id === deletedNoteId);
     if (!noteToRestore) { alert("Error: Deleted note not found."); return; }
     uiRefreshCallbacks.showLoadingOverlay("Restoring note...");
@@ -596,7 +611,7 @@ async function handleRestoreNote(deletedNoteId, targetNotebookId = null, newNote
     } catch (e) { console.error("Error restoring note:", e); alert("Failed to restore.");
     } finally { uiRefreshCallbacks.hideLoadingOverlay(); }
 }
-async function performEmptyTrash() { /* ... same as before ... */ 
+async function performEmptyTrash() { 
     if (localDeletedNotesCache.length === 0) return; uiRefreshCallbacks.showLoadingOverlay("Emptying Trash...");
     try {
         const batch = writeBatch(db);
@@ -605,7 +620,7 @@ async function performEmptyTrash() { /* ... same as before ... */
     } catch (e) { console.error("Error emptying trash:", e); alert("Failed to empty trash.");
     } finally { uiRefreshCallbacks.hideLoadingOverlay(); }
 }
-async function getExportData(notebookId) { /* ... same as before ... */ 
+async function getExportData(notebookId) { 
     const notebookToExport = localNotebooksCache.find(nb => nb.id === notebookId);
     if (!notebookToExport) throw new Error("Notebook not found for export.");
     const notesSnapshot = await getDocs(collection(db, `${userAppMemoirDocPath}/notebooks/${notebookId}/notes`));
@@ -620,7 +635,7 @@ async function getExportData(notebookId) { /* ... same as before ... */
 const setCurrentlyViewedNotebookId = (id) => { currentlyViewedNotebookId = id; };
 const setCurrentFilterTag = (tag) => { currentFilterTag = tag; };
 const setIsFavoritesViewActive = (active) => { isFavoritesViewActive = active; };
-const setCurrentSearchTerm = (term) => { currentSearchTerm = term.toLowerCase(); }; // Ensure it's always lowercase
+const setCurrentSearchTerm = (term) => { currentSearchTerm = term.toLowerCase(); };
 const setCurrentInteractingNoteIdInPanel = (id) => { currentInteractingNoteIdInPanel = id; };
 const setIsNewNoteSessionInPanel = (isNew) => { isNewNoteSessionInPanel = isNew; };
 const setActivelyCreatingNoteId = (id) => { activelyCreatingNoteId = id; };
@@ -651,15 +666,13 @@ export {
     noteActionContext, noteToRestoreWithOptions, isFavoritesViewActive, PALETTE_BASE_LIMIT, initialViewDetermined,
     lastSavedNoteTextInPanel, lastSavedNoteTitleInPanel, lastSavedNoteTagsInPanel, lastSavedNoteActivityInPanel,
     currentNoteTagsArrayInPanel, lastFetchedNoteDoc, isLoadingMoreNotes, noMoreNotesToLoad, currentSearchTerm,
-    Timestamp, // Export Timestamp if ui-handlers needs it directly (e.g. for date comparisons)
-    serverTimestamp, // Export serverTimestamp
+    Timestamp, serverTimestamp,
     setUIRefreshCallbacks, initializeDataListeners, setupNotesListenerAndLoadInitialBatch, fetchMoreNotes,
     saveAppSettings, createNotebook, updateNotebook, performActualNotebookDeletion, performActualNoteAction,
     moveNoteToTrashImmediately, saveTagChanges, performActualTagDeletion, checkAndCleanupOrphanedTag,
     saveCurrentEditDescription, debouncedSaveEditDescription, updateGlobalTagsFromNoteInput,
     handleNoteInputChange, debouncedHandleInteractionPanelInputChange, initializeDefaultNotebookFirestore,
     handleRestoreNote, performEmptyTrash, getExportData, convertTimestampToISO, debounce,
-    // Export the new setter consts
     setCurrentlyViewedNotebookId, setCurrentFilterTag, setIsFavoritesViewActive, setCurrentSearchTerm,
     setCurrentInteractingNoteIdInPanel, setIsNewNoteSessionInPanel, setActivelyCreatingNoteId,
     setCurrentOpenNotebookIdForPanel, setCurrentInteractingNoteOriginalNotebookId,
@@ -667,6 +680,5 @@ export {
     setLastSavedNoteTitleInPanel, setLastSavedNoteTagsInPanel, setLastSavedNoteActivityInPanel,
     setCurrentNoteTagsArrayInPanel, setNoteActionContext, setNoteToRestoreWithOptions,
     setTagToDeleteGlobally, setNotebookToDeleteGlobally, setInitialViewDetermined,
-    // Export core functions for direct use if needed by UI handlers, e.g.
     doc, collection, getDoc, updateDoc, deleteDoc, addDoc, writeBatch, runTransaction, query, where, getDocs, limit, startAfter, orderBy, onSnapshot
 };
