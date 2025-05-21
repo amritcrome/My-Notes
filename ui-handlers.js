@@ -1,4 +1,4 @@
-// ui-handlers.js
+// ui-handlers.js (v6.0.1 - Autosave Status)
 import * as core from './core-logic.js';
 
 // --- DOM ELEMENTS ---
@@ -36,22 +36,23 @@ let loadingOverlay, appSidebar, mainContentArea, hamburgerBtn, sidebarNotebooksP
     closeRestoreNoteWithOptionsModalBtn, restoreNoteOptionsMessage, restoreToNewNotebookBtn,
     restoreToExistingNotebookSelector, restoreToSelectedNotebookBtn, cancelRestoreWithOptionsBtn,
     confirmEmptyTrashModal, closeConfirmEmptyTrashModalBtn, cancelEmptyTrashBtn, executeEmptyTrashBtn,
-    exportNotebookSelector, exportNotebookBtn, exportStatusMessage;
+    exportNotebookSelector, exportNotebookBtn, exportStatusMessage,
+    // New Autosave Status Elements
+    autosaveStatusContainer, autosaveStatusIcon, autosaveStatusText;
 
-// --- UI State (mostly for direct UI control, core state is in core-logic) ---
+// --- UI State ---
 let lastSelectedNotePreviewElement = null;
-let isAdminModeEnabled = false; // UI directly uses this for toggles
+let isAdminModeEnabled = false; 
 let isPaletteEditMode = false;
-let currentSelectedColorForTagEdit = null; // Will be set from core.DEFAULT_TAG_COLOR initially
+let currentSelectedColorForTagEdit = null; 
 let currentSelectedNotebookCoverColor = null; 
 let currentSelectedNotebookCoverColor_create = null;
-
+let autosaveTimeoutId = null; // For clearing "Saved" message
 
 // --- UI Helper Functions ---
 function showLoadingOverlay(message = "Loading...") { if(loadingOverlay) { loadingOverlay.innerHTML = `<i class="fas fa-spinner fa-spin fa-2x mr-3"></i> ${message}`; loadingOverlay.classList.remove('hidden');} }
 function hideLoadingOverlay() { if(loadingOverlay) loadingOverlay.classList.add('hidden'); }
 function getTimeOfDay(date) { return date.getHours()>=5&&date.getHours()<12?"Morning":date.getHours()>=12&&date.getHours()<17?"Afternoon":date.getHours()>=17&&date.getHours()<21?"Evening":"Night"; }
-
 function formatDateFromTimestamp(timestamp) { 
     if (!timestamp) return "N/A"; 
     const date = timestamp instanceof core.Timestamp ? timestamp.toDate() : (timestamp instanceof Date ? timestamp : new Date(timestamp)); 
@@ -71,6 +72,49 @@ function sanitizeFilename(filename) {
     return filename.replace(/\s+/g, '_').replace(/[^\w\-_.]/g, '').replace(/_+/g, '_');
 }
 
+// --- Autosave Status UI Function ---
+function updateAutosaveStatusUI(status, message = "") {
+    if (!autosaveStatusContainer || !autosaveStatusIcon || !autosaveStatusText) return;
+
+    autosaveStatusContainer.style.display = 'flex';
+    autosaveStatusIcon.className = 'fas mr-2'; // Reset classes
+    autosaveStatusIcon.classList.remove('fa-spin-custom', 'text-green-500', 'text-gray-500', 'text-yellow-500', 'text-red-500');
+    autosaveStatusText.textContent = message || status.charAt(0).toUpperCase() + status.slice(1);
+
+    if (autosaveTimeoutId) clearTimeout(autosaveTimeoutId);
+
+    switch (status) {
+        case 'saving':
+            autosaveStatusIcon.classList.add('fa-save', 'fa-spin-custom', 'text-blue-500');
+            autosaveStatusText.textContent = message || "Saving...";
+            autosaveStatusText.className = 'text-blue-500';
+            break;
+        case 'saved':
+            autosaveStatusIcon.classList.add('fa-check-circle', 'text-green-500');
+            autosaveStatusText.textContent = message || "Saved";
+            autosaveStatusText.className = 'text-green-500';
+            autosaveTimeoutId = setTimeout(() => {
+                if (autosaveStatusText.textContent === "Saved") { // Only hide if still "Saved"
+                    autosaveStatusContainer.style.display = 'none';
+                }
+            }, 2000); // Hide after 2 seconds
+            break;
+        case 'unsaved':
+            autosaveStatusIcon.classList.add('fa-exclamation-circle', 'text-yellow-600');
+            autosaveStatusText.textContent = message || "Unsaved changes";
+            autosaveStatusText.className = 'text-yellow-600';
+            break;
+        case 'error':
+            autosaveStatusIcon.classList.add('fa-times-circle', 'text-red-500');
+            autosaveStatusText.textContent = message || "Error saving";
+            autosaveStatusText.className = 'text-red-500';
+            break;
+        default:
+            autosaveStatusContainer.style.display = 'none';
+            break;
+    }
+}
+
 
 // --- UI Rendering and Manipulation Functions ---
 function applyCurrentViewMode() {
@@ -79,7 +123,7 @@ function applyCurrentViewMode() {
     
     if (notesContentDiv && notesContentDiv.classList.contains('main-view-content-active')) {
         if (core.themeSettings.viewMode === 'comfortable') {
-            // `showing-grid` or `showing-editor` will be set by `switchToMainView` or click handlers
+            // Logic handled by switchToMainView
         } else { 
             notesContentDiv.classList.remove('showing-grid', 'showing-editor');
             if(notesPreviewColumnOuter) notesPreviewColumnOuter.style.display = 'flex';
@@ -117,6 +161,7 @@ function switchToMainView(viewName, context = null) {
             core.setCurrentSearchTerm(''); 
         }
     }
+    if (autosaveStatusContainer) autosaveStatusContainer.style.display = 'none'; // Hide autosave status on view switch
 
     if (viewName === 'notes') {
         if (core.themeSettings.viewMode === 'comfortable') {
@@ -205,7 +250,7 @@ function renderNotebooksOnPage() {
             if (e.target.closest('.notebook-page-card-icon')) return;
             core.setCurrentlyViewedNotebookId(notebook.id); 
             core.setIsFavoritesViewActive(false); core.setCurrentFilterTag(null);
-            clearInteractionPanel(true); 
+            clearInteractionPanelUI(true); 
             switchToMainView('notes'); 
             if (core.themeSettings.viewMode === 'comfortable') {
                 notesContentDiv.classList.add('showing-grid'); 
@@ -215,7 +260,7 @@ function renderNotebooksOnPage() {
                 if(fabCreateNote) fabCreateNote.classList.remove('hidden'); 
             }
             if (fabNavigateBack) fabNavigateBack.classList.remove('hidden'); 
-            displayNotebookHeader(notebook.id); 
+            displayNotebookHeaderUI(notebook.id); 
             core.setupNotesListenerAndLoadInitialBatch(); 
         });
         card.querySelector('.edit-notebook-icon-btn').addEventListener('click', (e) => { e.stopPropagation(); openEditNotebookModal(notebook.id); });
@@ -282,7 +327,7 @@ function renderPaletteColorsUI() {
                 newPaletteColorPicker.value = color; 
             } 
         }); 
-        const initialPaletteColors = ["#a7f3d0", "#6ee7b7", "#34d399", "#10b981", "#059669", "#fde047", "#facc15", "#eab308", "#f3f4f6"]; // Duplicated from core for now
+        const initialPaletteColors = ["#a7f3d0", "#6ee7b7", "#34d399", "#10b981", "#059669", "#fde047", "#facc15", "#eab308", "#f3f4f6"]; 
         if (isPaletteEditMode && !initialPaletteColors.includes(color)) { 
             const deleteBtn = document.createElement('button'); 
             deleteBtn.innerHTML = '&times;'; 
@@ -420,27 +465,10 @@ function handleDeleteNotebook(notebookId) {
     if (confirmNotebookDeleteModal) confirmNotebookDeleteModal.style.display = 'flex'; 
 }
 
-function openConfirmNoteActionModal(type, noteId, notebookId, noteTitle, isDeletedNote = false) {
-    core.setNoteActionContext({ type, id: noteId, notebookId, title: noteTitle || "(Untitled Note)", isDeletedNote });
-    if (!confirmNoteActionModal || !confirmNoteActionTitle || !confirmNoteActionMessage || !confirmNoteActionWarning || !executeNoteActionBtn) return;
-    if (type === 'deletePermanently') { 
-        confirmNoteActionTitle.textContent = "Delete Note Permanently?";
-        confirmNoteActionMessage.textContent = `Are you sure you want to permanently delete the note "${core.noteActionContext.title}"?`;
-        confirmNoteActionWarning.textContent = "This action cannot be undone.";
-        executeNoteActionBtn.textContent = "Delete Permanently";
-        executeNoteActionBtn.className = "px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md shadow-sm";
-        confirmNoteActionModal.style.display = 'flex';
-    }
-}
 function closeConfirmNoteActionModal() {
     if (confirmNoteActionModal) confirmNoteActionModal.style.display = 'none';
     core.setNoteActionContext({ type: null, id: null, notebookId: null, title: null, isDeletedNote: false });
 }
-
-// More UI functions (renderAllNotesPreviews, renderTagsInSettings, etc.)
-// will be adapted from the original app.js and placed here.
-// They will use data from `core.localNotesCache`, `core.localTagsCache`, etc.
-// and call core functions for actions.
 
 function displayNotebookHeaderUI(notebookId) { 
     const notebook = core.localNotebooksCache.find(nb => nb.id === notebookId); 
@@ -716,6 +744,7 @@ function renderTagPillsInPanelUI() {
         removeBtn.addEventListener('click', () => {
             core.setCurrentNoteTagsArrayInPanel(core.currentNoteTagsArrayInPanel.filter(t => t !== tagName));
             renderTagPillsInPanelUI(); 
+            updateAutosaveStatusUI('unsaved'); // Mark as unsaved
             core.debouncedHandleInteractionPanelInputChange(); 
         });
         tagPill.appendChild(removeBtn);
@@ -738,54 +767,36 @@ function updatePanelNotebookSelectorUI() {
     else if (core.localNotebooksCache.length > 0) panelNotebookSelector.value = core.localNotebooksCache[0].id; 
 }
 
-
-// --- Interaction Panel Logic ---
-// (Includes calls to core logic for data, and direct UI updates)
-
 async function processInteractionPanelEditsOnDeselectUI(isSwitchingContext = false) { 
     if (core.currentInteractingNoteIdInPanel && !core.isNewNoteSessionInPanel) {
         await core.saveCurrentEditDescription(); 
     }
-    
     core.setCurrentEditSessionEntryId(null);
     core.setCurrentEditSessionOpenTimePanel(null);
     if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
     if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'none';
-    
     let noteBeingProcessedId = core.currentInteractingNoteIdInPanel || core.activelyCreatingNoteId; 
     if (core.isNewNoteSessionInPanel && !noteBeingProcessedId) { 
         if (noteTitleInputField_panel.value.trim() === "" && noteTextInputField_panel.value.trim() === "") return; 
     }
-
     if (core.activelyCreatingNoteId && noteBeingProcessedId === core.activelyCreatingNoteId) {
-        const tempNote = core.localNotesCache.find(n => n.id === noteBeingProcessedId); // This might be slightly delayed from Firestore
-        // A better check might be against the input fields directly if the note is truly new and not yet in localNotesCache
+        const tempNote = core.localNotesCache.find(n => n.id === noteBeingProcessedId);
         const titleIsEmpty = noteTitleInputField_panel.value.trim() === "";
         const textIsEmpty = noteTextInputField_panel.value.trim() === "";
         const activityIsEmpty = !interactionPanelActivityInputField || interactionPanelActivityInputField.value.trim() === "";
-
         if (titleIsEmpty && textIsEmpty && activityIsEmpty) {
              if(isSwitchingContext){ 
                 try {
-                    // Find the actual notebookId used for creation, which is currentOpenNotebookIdForPanel
                     const notebookIdForDeletion = tempNote ? tempNote.notebookId : core.currentOpenNotebookIdForPanel;
                     if (notebookIdForDeletion) {
-                        const tempNoteDocPath = `${core.userAppMemoirDocPath}/notebooks/${notebookIdForDeletion}/notes/${noteBeingProcessedId}`;
-                        await core.deleteDoc(core.doc(core.db, tempNoteDocPath));
-                        const notebookDocPath = `${core.userAppMemoirDocPath}/notebooks/${notebookIdForDeletion}`;
-                        const notebookRef = core.doc(core.db, notebookDocPath);
+                        await core.deleteDoc(core.doc(core.db, `${core.userAppMemoirDocPath}/notebooks/${notebookIdForDeletion}/notes/${noteBeingProcessedId}`));
+                        const notebookRef = core.doc(core.db, `${core.userAppMemoirDocPath}/notebooks/${notebookIdForDeletion}`);
                         const notebookSnap = await core.getDoc(notebookRef);
-                        if (notebookSnap.exists()) {
-                            await core.updateDoc(notebookRef, { notesCount: Math.max(0, (notebookSnap.data().notesCount || 0) - 1) });
-                        }
-                        // Tag cleanup for tempNote if it existed and had tags
-                        if (tempNote && tempNote.tags && tempNote.tags.length > 0) {
-                            for (const tag of tempNote.tags) await core.checkAndCleanupOrphanedTag(tag.name);
-                        }
+                        if (notebookSnap.exists()) await core.updateDoc(notebookRef, { notesCount: Math.max(0, (notebookSnap.data().notesCount || 0) - 1) });
+                        if (tempNote && tempNote.tags) for (const tag of tempNote.tags) await core.checkAndCleanupOrphanedTag(tag.name);
                     }
                 } catch (e) { console.error("Error deleting empty new note:", e); }
-                core.setActivelyCreatingNoteId(null); 
-                return; 
+                core.setActivelyCreatingNoteId(null); return; 
              }
         }
     }
@@ -796,17 +807,11 @@ function clearInteractionPanelUI(processEdits = true) {
     if(noteInteractionFormContainer) noteInteractionFormContainer.style.display = 'none'; 
     if(noteInteractionPanelPlaceholder) noteInteractionPanelPlaceholder.style.display = 'flex'; 
     if(interactionPanelForm) interactionPanelForm.reset(); 
-    
-    core.setCurrentInteractingNoteIdInPanel(null); 
-    core.setIsNewNoteSessionInPanel(false); 
-    core.setActivelyCreatingNoteId(null); 
-    core.setCurrentEditSessionOpenTimePanel(null); 
-    core.setCurrentEditSessionEntryId(null); 
-    core.setCurrentOpenNotebookIdForPanel(null); 
-    core.setCurrentInteractingNoteOriginalNotebookId(null); 
+    core.setCurrentInteractingNoteIdInPanel(null); core.setIsNewNoteSessionInPanel(false); core.setActivelyCreatingNoteId(null); 
+    core.setCurrentEditSessionOpenTimePanel(null); core.setCurrentEditSessionEntryId(null); 
+    core.setCurrentOpenNotebookIdForPanel(null); core.setCurrentInteractingNoteOriginalNotebookId(null); 
     core.setCurrentNoteTagsArrayInPanel([]);
     renderTagPillsInPanelUI(); 
-
     if (lastSelectedNotePreviewElement) { 
         lastSelectedNotePreviewElement.classList.remove('selected'); 
         const deselectedNoteId = lastSelectedNotePreviewElement.dataset.noteId;
@@ -822,9 +827,7 @@ function clearInteractionPanelUI(processEdits = true) {
             const h4El = lastSelectedNotePreviewElement.querySelector('h4');
             const pContentEl = lastSelectedNotePreviewElement.querySelector('.note-content-preview');
             const pNotebookEl = lastSelectedNotePreviewElement.querySelector('.note-preview-notebook-name');
-            if(h4El) h4El.style.color = calculatedTextColor;
-            if(pContentEl) pContentEl.style.color = calculatedTextColor;
-            if(pNotebookEl) pNotebookEl.style.color = '#6b7280';
+            if(h4El) h4El.style.color = calculatedTextColor; if(pContentEl) pContentEl.style.color = calculatedTextColor; if(pNotebookEl) pNotebookEl.style.color = '#6b7280';
             const favStarDiv = lastSelectedNotePreviewElement.querySelector('.favorite-star');
              if (favStarDiv) {
                 const favIcon = favStarDiv.querySelector('i');
@@ -842,111 +845,75 @@ function clearInteractionPanelUI(processEdits = true) {
     if(notebookChangeConfirmationEl) notebookChangeConfirmationEl.textContent = ''; 
     if(panelNotebookSelectorContainer) panelNotebookSelectorContainer.style.display = 'none'; 
     updateNoteInfoPanelUI(null); 
+    if (autosaveStatusContainer) autosaveStatusContainer.style.display = 'none';
 }
-
-// ... (Other UI functions like setupPanelForNewNote, displayNoteInInteractionPanel)
-// These will be more complex as they involve both setting UI and calling core logic to get data or update state.
 
 function setupPanelForNewNote(notebookId, notebookName) { 
     if (core.currentInteractingNoteIdInPanel || core.isNewNoteSessionInPanel || core.activelyCreatingNoteId) {
         processInteractionPanelEditsOnDeselectUI(true); 
     }
     clearInteractionPanelUI(false); 
-
-    core.setIsNewNoteSessionInPanel(true); 
-    core.setActivelyCreatingNoteId(null); 
-    core.setCurrentInteractingNoteIdInPanel(null); 
-    core.setCurrentOpenNotebookIdForPanel(notebookId); 
-    core.setCurrentInteractingNoteOriginalNotebookId(null); 
-    core.setCurrentEditSessionOpenTimePanel(null); 
-    core.setCurrentEditSessionEntryId(null); 
-    core.setCurrentNoteTagsArrayInPanel([]); 
-
+    core.setIsNewNoteSessionInPanel(true); core.setActivelyCreatingNoteId(null); core.setCurrentInteractingNoteIdInPanel(null); 
+    core.setCurrentOpenNotebookIdForPanel(notebookId); core.setCurrentInteractingNoteOriginalNotebookId(null); 
+    core.setCurrentEditSessionOpenTimePanel(null); core.setCurrentEditSessionEntryId(null); core.setCurrentNoteTagsArrayInPanel([]); 
     if(interactionPanelForm) interactionPanelForm.reset(); 
-    updatePanelNotebookSelectorUI(); // Uses core.currentOpenNotebookIdForPanel
+    updatePanelNotebookSelectorUI(); 
     if(panelNotebookSelectorContainer) panelNotebookSelectorContainer.style.display = 'block'; 
     if(notebookChangeConfirmationEl) notebookChangeConfirmationEl.textContent = ''; 
-    
     if (panelCreationTimeContainer) {
         if (isAdminModeEnabled) { 
             panelCreationTimeContainer.style.display = 'block';
-            if(interactionPanelCreationTimeDisplayField) {
-                interactionPanelCreationTimeDisplayField.textContent = formatFullDateFromTimestamp(new Date()); 
-                interactionPanelCreationTimeDisplayField.style.display = 'flex';
-            }
+            if(interactionPanelCreationTimeDisplayField) { interactionPanelCreationTimeDisplayField.textContent = formatFullDateFromTimestamp(new Date()); interactionPanelCreationTimeDisplayField.style.display = 'flex';}
             if(interactionPanelCreationTimeInputsContainer) interactionPanelCreationTimeInputsContainer.style.display = 'none';
         } else { panelCreationTimeContainer.style.display = 'none'; }
     }
     if(panelActivityContainer) panelActivityContainer.style.display = 'block';
-    if(interactionPanelActivityInputField) {
-        interactionPanelActivityInputField.style.display = 'block';
-        interactionPanelActivityInputField.value = '';
-    }
+    if(interactionPanelActivityInputField) { interactionPanelActivityInputField.style.display = 'block'; interactionPanelActivityInputField.value = ''; }
     if(interactionPanelActivityDisplayField) interactionPanelActivityDisplayField.style.display = 'none';
     if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'none'; 
     if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
-    
     renderTagPillsInPanelUI(); 
     updateNoteInfoPanelUI({ createdAt: 'PENDING_SAVE', activity: '', tags: [], edits: [] }); 
-    
     if(noteInteractionPanelPlaceholder) noteInteractionPanelPlaceholder.style.display = 'none';
     if(noteInteractionFormContainer) noteInteractionFormContainer.style.display = 'flex'; 
     if(noteTitleInputField_panel) noteTitleInputField_panel.focus();
-
-    core.setLastSavedNoteTitleInPanel("");
-    core.setLastSavedNoteTextInPanel("");
-    core.setLastSavedNoteTagsInPanel("");
-    core.setLastSavedNoteActivityInPanel("");
+    core.setLastSavedNoteTitleInPanel(""); core.setLastSavedNoteTextInPanel(""); core.setLastSavedNoteTagsInPanel(""); core.setLastSavedNoteActivityInPanel("");
+    updateAutosaveStatusUI('initial'); // Or hide it initially
 }
 
 function displayNoteInInteractionPanel(noteId, forceFocusToTitle = true) { 
     const previousInteractingNoteId = core.currentInteractingNoteIdInPanel;
     const isActuallySwitchingNotes = previousInteractingNoteId !== noteId;
-
     if (isActuallySwitchingNotes && ((core.currentInteractingNoteIdInPanel && core.currentInteractingNoteIdInPanel !== noteId) || core.isNewNoteSessionInPanel) ) {
         processInteractionPanelEditsOnDeselectUI(true); 
     }
-    
     const noteToEdit = core.localNotesCache.find(n => n.id === noteId); 
     if (!noteToEdit) { clearInteractionPanelUI(false); return; } 
-    
-    core.setIsNewNoteSessionInPanel(false); 
-    core.setCurrentInteractingNoteIdInPanel(noteId); 
-    core.setCurrentInteractingNoteOriginalNotebookId(noteToEdit.notebookId); 
-    core.setCurrentOpenNotebookIdForPanel(noteToEdit.notebookId); 
-    
+    core.setIsNewNoteSessionInPanel(false); core.setCurrentInteractingNoteIdInPanel(noteId); 
+    core.setCurrentInteractingNoteOriginalNotebookId(noteToEdit.notebookId); core.setCurrentOpenNotebookIdForPanel(noteToEdit.notebookId); 
     if (isActuallySwitchingNotes) { 
-        core.setCurrentEditSessionOpenTimePanel(null); 
-        core.setCurrentEditSessionEntryId(null); 
+        core.setCurrentEditSessionOpenTimePanel(null); core.setCurrentEditSessionEntryId(null); 
         if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
         if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'none'; 
     }
-
-    core.setLastSavedNoteTitleInPanel(noteToEdit.title || "");
-    core.setLastSavedNoteTextInPanel(noteToEdit.text || "");
+    core.setLastSavedNoteTitleInPanel(noteToEdit.title || ""); core.setLastSavedNoteTextInPanel(noteToEdit.text || "");
     core.setCurrentNoteTagsArrayInPanel((noteToEdit.tags || []).map(tagObj => tagObj.name));
     core.setLastSavedNoteTagsInPanel(core.currentNoteTagsArrayInPanel.slice().sort().join(','));
     core.setLastSavedNoteActivityInPanel(noteToEdit.activity || '');
-
     if(noteTitleInputField_panel) {
         const newTitle = noteToEdit.title || "";
-        if (document.activeElement !== noteTitleInputField_panel || isActuallySwitchingNotes) { 
-            if (noteTitleInputField_panel.value !== newTitle) noteTitleInputField_panel.value = newTitle;
-        }
+        if (document.activeElement !== noteTitleInputField_panel || isActuallySwitchingNotes) { if (noteTitleInputField_panel.value !== newTitle) noteTitleInputField_panel.value = newTitle;}
     }
     if(noteTextInputField_panel) {
         const newText = noteToEdit.text || "";
-         if (document.activeElement !== noteTextInputField_panel || isActuallySwitchingNotes) { 
-            if (noteTextInputField_panel.value !== newText) noteTextInputField_panel.value = newText;
-        }
+         if (document.activeElement !== noteTextInputField_panel || isActuallySwitchingNotes) { if (noteTextInputField_panel.value !== newText) noteTextInputField_panel.value = newText;}
         if (!core.isNewNoteSessionInPanel && core.currentInteractingNoteIdInPanel) { 
             const oldListener = noteTextInputField_panel._handleFirstMainEditListener;
             if (oldListener) noteTextInputField_panel.removeEventListener('input', oldListener);
             const handleFirstMainEdit = () => {
                 if (core.currentInteractingNoteIdInPanel === noteId && !core.currentEditSessionOpenTimePanel) { 
                     if(interactionPanelCurrentEditSessionContainer) interactionPanelCurrentEditSessionContainer.style.display = 'block';
-                    core.setCurrentEditSessionOpenTimePanel(new Date()); 
-                    core.setCurrentEditSessionEntryId(null); 
+                    core.setCurrentEditSessionOpenTimePanel(new Date()); core.setCurrentEditSessionEntryId(null); 
                     if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.value = ''; 
                 }
             };
@@ -958,15 +925,11 @@ function displayNoteInInteractionPanel(noteId, forceFocusToTitle = true) {
             } else if (interactionPanelCurrentEditSessionContainer && core.currentEditSessionOpenTimePanel) {
                  interactionPanelCurrentEditSessionContainer.style.display = 'block';
             }
-        } else if (interactionPanelCurrentEditSessionContainer) {
-             interactionPanelCurrentEditSessionContainer.style.display = 'none'; 
-        }
+        } else if (interactionPanelCurrentEditSessionContainer) { interactionPanelCurrentEditSessionContainer.style.display = 'none'; }
     }
-    renderTagPillsInPanelUI(); 
-    updatePanelNotebookSelectorUI(); 
+    renderTagPillsInPanelUI(); updatePanelNotebookSelectorUI(); 
     if(panelNotebookSelectorContainer) panelNotebookSelectorContainer.style.display = 'block'; 
     if(notebookChangeConfirmationEl) notebookChangeConfirmationEl.textContent = ''; 
-    
     if (panelCreationTimeContainer) {
         if (isAdminModeEnabled) { 
             panelCreationTimeContainer.style.display = 'block';
@@ -984,19 +947,14 @@ function displayNoteInInteractionPanel(noteId, forceFocusToTitle = true) {
             if(interactionPanelActivityInputField) {
                 interactionPanelActivityInputField.style.display = 'block'; 
                 const newActivity = noteToEdit.activity || '';
-                if (document.activeElement !== interactionPanelActivityInputField) { 
-                    if(interactionPanelActivityInputField.value !== newActivity) interactionPanelActivityInputField.value = newActivity;
-                }
+                if (document.activeElement !== interactionPanelActivityInputField) { if(interactionPanelActivityInputField.value !== newActivity) interactionPanelActivityInputField.value = newActivity;}
             }
         } else { panelActivityContainer.style.display = 'none'; }
     }
     updateNoteInfoPanelUI(noteToEdit); 
     if(noteInteractionPanelPlaceholder) noteInteractionPanelPlaceholder.style.display = 'none'; 
     if(noteInteractionFormContainer) noteInteractionFormContainer.style.display = 'flex'; 
-    if (forceFocusToTitle && noteTitleInputField_panel && document.activeElement !== noteTitleInputField_panel) { 
-        noteTitleInputField_panel.focus();
-    }
-
+    if (forceFocusToTitle && noteTitleInputField_panel && document.activeElement !== noteTitleInputField_panel) noteTitleInputField_panel.focus();
     if (lastSelectedNotePreviewElement && lastSelectedNotePreviewElement.dataset.noteId !== noteId) { 
         const deselectedNoteId = lastSelectedNotePreviewElement.dataset.noteId;
         const deselectedNoteData = core.localNotesCache.find(n => n.id === deselectedNoteId);
@@ -1012,60 +970,43 @@ function displayNoteInInteractionPanel(noteId, forceFocusToTitle = true) {
             const h4El = lastSelectedNotePreviewElement.querySelector('h4');
             const pContentEl = lastSelectedNotePreviewElement.querySelector('.note-content-preview');
             const pNotebookEl = lastSelectedNotePreviewElement.querySelector('.note-preview-notebook-name');
-            if (h4El) h4El.style.color = calculatedTextColor;
-            if (pContentEl) pContentEl.style.color = calculatedTextColor;
-            if (pNotebookEl) pNotebookEl.style.color = '#6b7280'; 
+            if (h4El) h4El.style.color = calculatedTextColor; if (pContentEl) pContentEl.style.color = calculatedTextColor; if (pNotebookEl) pNotebookEl.style.color = '#6b7280'; 
             const favStarDiv = lastSelectedNotePreviewElement.querySelector('.favorite-star');
             if (favStarDiv) {
                 const favIcon = favStarDiv.querySelector('i');
-                if (favIcon) {
-                    favStarDiv.classList.toggle('is-favorite', deselectedNoteData.isFavorite || false);
-                    favIcon.className = deselectedNoteData.isFavorite ? 'fas fa-star' : 'far fa-star';
-                    favIcon.style.color = deselectedNoteData.isFavorite ? '#FBBF24' : '#a0aec0';
-                }
+                if (favIcon) { favStarDiv.classList.toggle('is-favorite', deselectedNoteData.isFavorite || false); favIcon.className = deselectedNoteData.isFavorite ? 'fas fa-star' : 'far fa-star'; favIcon.style.color = deselectedNoteData.isFavorite ? '#FBBF24' : '#a0aec0'; }
             }
-            const delIcon = lastSelectedNotePreviewElement.querySelector('.delete-note-icon i');
-            if (delIcon) delIcon.style.color = '#ef4444'; 
-        } else { /* ... reset to default if no data ... */ }
+            const delIcon = lastSelectedNotePreviewElement.querySelector('.delete-note-icon i'); if (delIcon) delIcon.style.color = '#ef4444'; 
+        }
     }
     const currentPreviewEl = document.querySelector(`.note-preview-card[data-note-id="${noteId}"]`);
     if (currentPreviewEl) {
         if (core.themeSettings.viewMode === 'compact') { 
             currentPreviewEl.style.backgroundColor = ''; 
-            const h4Selected = currentPreviewEl.querySelector('h4');
-            const pContentSelected = currentPreviewEl.querySelector('.note-content-preview');
-            const pNotebookSelected = currentPreviewEl.querySelector('.note-preview-notebook-name');
+            const h4Selected = currentPreviewEl.querySelector('h4'); const pContentSelected = currentPreviewEl.querySelector('.note-content-preview'); const pNotebookSelected = currentPreviewEl.querySelector('.note-preview-notebook-name');
             if(h4Selected) h4Selected.style.color = ''; if(pContentSelected) pContentSelected.style.color = ''; if(pNotebookSelected) pNotebookSelected.style.color = '';
             currentPreviewEl.classList.add('selected'); 
         } else { currentPreviewEl.classList.remove('selected'); }
-        const favoriteIconSelected = currentPreviewEl.querySelector('.favorite-star i');
-        const deleteIconSelected = currentPreviewEl.querySelector('.delete-note-icon i');
-        const favStarDivSelected = currentPreviewEl.querySelector('.favorite-star');
+        const favoriteIconSelected = currentPreviewEl.querySelector('.favorite-star i'); const deleteIconSelected = currentPreviewEl.querySelector('.delete-note-icon i'); const favStarDivSelected = currentPreviewEl.querySelector('.favorite-star');
         if (favStarDivSelected && favoriteIconSelected) {
-            favStarDivSelected.classList.toggle('is-favorite', noteToEdit.isFavorite || false);
-            favoriteIconSelected.className = noteToEdit.isFavorite ? 'fas fa-star' : 'far fa-star';
+            favStarDivSelected.classList.toggle('is-favorite', noteToEdit.isFavorite || false); favoriteIconSelected.className = noteToEdit.isFavorite ? 'fas fa-star' : 'far fa-star';
             favoriteIconSelected.style.color = currentPreviewEl.classList.contains('selected') ? (noteToEdit.isFavorite ? '#FBBF24' : '#FFFFFF') : (noteToEdit.isFavorite ? '#FBBF24' : '#a0aec0');
         }
         if (deleteIconSelected) deleteIconSelected.style.color = currentPreviewEl.classList.contains('selected') ? '#f87171' : '#ef4444'; 
         lastSelectedNotePreviewElement = currentPreviewEl;
         if (core.themeSettings.viewMode === 'compact') currentPreviewEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
+    updateAutosaveStatusUI('saved', 'Loaded'); // Indicate note is loaded and considered "saved"
 }
 
 function populateExportNotebookSelectorUI() {
     if (!exportNotebookSelector) return;
     exportNotebookSelector.innerHTML = ''; 
     if (core.localNotebooksCache.length === 0) {
-        const option = document.createElement('option');
-        option.value = ""; option.textContent = "No notebooks to export"; option.disabled = true;
-        exportNotebookSelector.appendChild(option);
-        if (exportNotebookBtn) exportNotebookBtn.disabled = true;
+        const option = document.createElement('option'); option.value = ""; option.textContent = "No notebooks to export"; option.disabled = true;
+        exportNotebookSelector.appendChild(option); if (exportNotebookBtn) exportNotebookBtn.disabled = true;
     } else {
-        core.localNotebooksCache.forEach(notebook => {
-            const option = document.createElement('option');
-            option.value = notebook.id; option.textContent = notebook.title;
-            exportNotebookSelector.appendChild(option);
-        });
+        core.localNotebooksCache.forEach(notebook => { const option = document.createElement('option'); option.value = notebook.id; option.textContent = notebook.title; exportNotebookSelector.appendChild(option); });
         if (exportNotebookBtn) exportNotebookBtn.disabled = false;
     }
     if (exportStatusMessage) exportStatusMessage.textContent = '';
@@ -1075,27 +1016,17 @@ function handleRestoreNoteUI(deletedNoteId) {
     const noteData = core.localDeletedNotesCache.find(dn => dn.id === deletedNoteId);
     if (!noteData) { alert("Error: Deleted note not found."); return; }
     core.setNoteToRestoreWithOptions(noteData);
-
     const originalNotebookExists = core.localNotebooksCache.some(nb => nb.id === noteData.originalNotebookId);
-
-    if (originalNotebookExists) {
-        core.handleRestoreNote(deletedNoteId, noteData.originalNotebookId);
-    } else {
-        if (restoreNoteOptionsMessage) restoreNoteOptionsMessage.textContent = `The original notebook "${noteData.originalNotebookName || 'Unknown'}" for this note no longer exists.`;
-        if (restoreToNewNotebookBtn) restoreToNewNotebookBtn.textContent = `Create new notebook "${noteData.originalNotebookName || 'Restored Notes'}" and restore here`;
+    if (originalNotebookExists) core.handleRestoreNote(deletedNoteId, noteData.originalNotebookId);
+    else {
+        if (restoreNoteOptionsMessage) restoreNoteOptionsMessage.textContent = `Original notebook "${noteData.originalNotebookName || 'Unknown'}" no longer exists.`;
+        if (restoreToNewNotebookBtn) restoreToNewNotebookBtn.textContent = `Create new notebook "${noteData.originalNotebookName || 'Restored Notes'}" and restore`;
         if (restoreToExistingNotebookSelector) {
             restoreToExistingNotebookSelector.innerHTML = '';
             if (core.localNotebooksCache.length > 0) {
-                core.localNotebooksCache.forEach(nb => {
-                    const option = document.createElement('option'); option.value = nb.id; option.textContent = nb.title;
-                    restoreToExistingNotebookSelector.appendChild(option);
-                });
+                core.localNotebooksCache.forEach(nb => { const option = document.createElement('option'); option.value = nb.id; option.textContent = nb.title; restoreToExistingNotebookSelector.appendChild(option); });
                 restoreToExistingNotebookSelector.disabled = false; restoreToSelectedNotebookBtn.disabled = false;
-            } else {
-                const option = document.createElement('option'); option.textContent = "No existing notebooks";
-                restoreToExistingNotebookSelector.appendChild(option);
-                restoreToExistingNotebookSelector.disabled = true; restoreToSelectedNotebookBtn.disabled = true;
-            }
+            } else { const option = document.createElement('option'); option.textContent = "No existing notebooks"; restoreToExistingNotebookSelector.appendChild(option); restoreToExistingNotebookSelector.disabled = true; restoreToSelectedNotebookBtn.disabled = true; }
         }
         if (restoreNoteWithOptionsModal) restoreNoteWithOptionsModal.style.display = 'flex';
     }
@@ -1111,7 +1042,6 @@ function openConfirmDeleteTagModalFromCard(tagId, tagName) {
 function closeEditTagModal() { 
     if(editTagModal) editTagModal.style.display = 'none'; 
     if(editTagForm) editTagForm.reset(); 
-    // Reset core state if needed: editingOriginalTagNameField.value = ''; editingTagIdField.value = '';
     if (deleteTagBtn) deleteTagBtn.disabled = false; 
     currentSelectedColorForTagEdit = core.DEFAULT_TAG_COLOR;
 }
@@ -1261,44 +1191,33 @@ document.addEventListener('DOMContentLoaded', () => {
     exportNotebookSelector = document.getElementById('exportNotebookSelector');
     exportNotebookBtn = document.getElementById('exportNotebookBtn');
     exportStatusMessage = document.getElementById('exportStatusMessage');
+    autosaveStatusContainer = document.getElementById('autosaveStatusContainer');
+    autosaveStatusIcon = document.getElementById('autosaveStatusIcon');
+    autosaveStatusText = document.getElementById('autosaveStatusText');
 
-    // Initialize currentSelectedColorForTagEdit after core.DEFAULT_TAG_COLOR is available
     currentSelectedColorForTagEdit = core.DEFAULT_TAG_COLOR;
 
-
-    // Set up UI refresh callbacks for core logic
     core.setUIRefreshCallbacks({
-        renderAllNotesPreviews,
-        renderNotebooksOnPage,
-        renderTagsInSettings,
-        renderDeletedNotesList,
+        renderAllNotesPreviews, renderNotebooksOnPage, renderTagsInSettings, renderDeletedNotesList,
         updatePanelNotebookSelector: updatePanelNotebookSelectorUI,
         displayNotebookHeader: displayNotebookHeaderUI,
-        applyThemeSettings: applyThemeSettingsUI,
-        updateViewModeRadios: updateViewModeRadiosUI,
-        renderPaletteColors: renderPaletteColorsUI,
-        updatePaletteLimitMessage: updatePaletteLimitMessageUI,
-        updateNoteInfoPanel: updateNoteInfoPanelUI,
-        renderTagPillsInPanel: renderTagPillsInPanelUI,
-        switchToMainView,
-        clearInteractionPanel: clearInteractionPanelUI,
+        applyThemeSettings: applyThemeSettingsUI, updateViewModeRadios: updateViewModeRadiosUI,
+        renderPaletteColors: renderPaletteColorsUI, updatePaletteLimitMessage: updatePaletteLimitMessageUI,
+        updateNoteInfoPanel: updateNoteInfoPanelUI, renderTagPillsInPanel: renderTagPillsInPanelUI,
+        switchToMainView, clearInteractionPanel: clearInteractionPanelUI,
         populateExportNotebookSelector: populateExportNotebookSelectorUI,
-        hideLoadingOverlay,
-        showLoadingOverlay,
+        hideLoadingOverlay, showLoadingOverlay,
+        updateAutosaveStatus: updateAutosaveStatusUI // Add new callback
     });
 
-    // Initialize core data listeners
     core.initializeDataListeners();
 
-    // --- Initial UI Setup ---
     const fixedSidebarWidth = '7rem'; 
     if (appSidebar && mainContentArea) {
-        appSidebar.style.width = fixedSidebarWidth;
-        mainContentArea.style.marginLeft = fixedSidebarWidth;
+        appSidebar.style.width = fixedSidebarWidth; mainContentArea.style.marginLeft = fixedSidebarWidth;
         if (hamburgerBtn) hamburgerBtn.style.display = 'none'; 
     }
     
-    // --- UI Event Listeners ---
     if(sidebarNotebooksPageBtn) sidebarNotebooksPageBtn.addEventListener('click', () => { 
         if (fabNavigateBack) fabNavigateBack.classList.add('hidden');
         core.setIsFavoritesViewActive(false); core.setCurrentFilterTag(null); core.setCurrentlyViewedNotebookId(null); 
@@ -1327,20 +1246,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     
     if (fabNavigateBack) fabNavigateBack.addEventListener('click', () => {
-        // Re-evaluate this logic based on where the user is coming from
         if (core.themeSettings.viewMode === 'comfortable' && notesContentDiv.classList.contains('showing-editor')) {
-            switchToMainView('notes', null); // Go back to grid view
+            switchToMainView('notes', null); 
         } else if (core.currentlyViewedNotebookId) { 
-            core.setCurrentlyViewedNotebookId(null);
-            switchToMainView('notebooks'); 
+            core.setCurrentlyViewedNotebookId(null); switchToMainView('notebooks'); 
         } else if (core.currentFilterTag || core.isFavoritesViewActive) {
-            core.setCurrentFilterTag(null);
-            core.setIsFavoritesViewActive(false);
-            switchToMainView('notes'); // Go to all notes
-            core.setupNotesListenerAndLoadInitialBatch();
-        } else {
-            switchToMainView(core.themeSettings.defaultHomepage || 'notebooks'); // Default back
-        }
+            core.setCurrentFilterTag(null); core.setIsFavoritesViewActive(false);
+            switchToMainView('notes'); core.setupNotesListenerAndLoadInitialBatch();
+        } else { switchToMainView(core.themeSettings.defaultHomepage || 'notebooks'); }
     });
 
     if (allNotesSearchInput) {
@@ -1360,16 +1273,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     themeColorInputs.forEach(input => { 
         input.addEventListener('input', core.debounce(async (event) => { 
-            const key = event.target.dataset.themeKey; 
-            const value = event.target.value; 
-            core.themeSettings[key] = value; // Directly modify themeSettings from core
-            applyThemeSettingsUI(); 
-            await core.saveAppSettings({ activeThemeColors: {
-                appDefaultBackgroundColor: core.themeSettings.appDefaultBackgroundColor,
-                themeSidebarBg: core.themeSettings.themeSidebarBg,
-                themeButtonPrimary: core.themeSettings.themeButtonPrimary,
-                themeBorderAccent: core.themeSettings.themeBorderAccent
-            }, defaultHomepage: core.themeSettings.defaultHomepage, viewMode: core.themeSettings.viewMode });
+            const key = event.target.dataset.themeKey; const value = event.target.value; 
+            core.themeSettings[key] = value; applyThemeSettingsUI(); 
+            await core.saveAppSettings({ activeThemeColors: { /* ... */ }, defaultHomepage: core.themeSettings.defaultHomepage, viewMode: core.themeSettings.viewMode });
         }, 250)); 
     });
     
@@ -1377,20 +1283,17 @@ document.addEventListener('DOMContentLoaded', () => {
         core.themeSettings.defaultHomepage = event.target.value; 
         await core.saveAppSettings({ defaultHomepage: core.themeSettings.defaultHomepage });
     });
-
     if(viewModeCompactRadio) viewModeCompactRadio.addEventListener('change', async () => {
         if (viewModeCompactRadio.checked) {
             core.themeSettings.viewMode = 'compact';
-            await core.saveAppSettings({ viewMode: 'compact' });
-            applyCurrentViewMode();
+            await core.saveAppSettings({ viewMode: 'compact' }); applyCurrentViewMode();
             if (notesContentDiv.classList.contains('main-view-content-active')) core.setupNotesListenerAndLoadInitialBatch(); 
         }
     });
     if(viewModeComfortableRadio) viewModeComfortableRadio.addEventListener('change', async () => {
         if (viewModeComfortableRadio.checked) {
             core.themeSettings.viewMode = 'comfortable';
-            await core.saveAppSettings({ viewMode: 'comfortable' });
-            applyCurrentViewMode();
+            await core.saveAppSettings({ viewMode: 'comfortable' }); applyCurrentViewMode();
             if (notesContentDiv.classList.contains('main-view-content-active')) core.setupNotesListenerAndLoadInitialBatch(); 
         }
     });
@@ -1400,37 +1303,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (cancelThemeResetBtn) cancelThemeResetBtn.addEventListener('click', () => { if (confirmThemeResetModal) confirmThemeResetModal.style.display = 'none'; });
     if (executeThemeResetBtn) executeThemeResetBtn.addEventListener('click', async () => {
         showLoadingOverlay("Resetting theme...");
-        const initialSettings = { // Re-declare or get from core
-            themeSidebarBg: "#047857", themeButtonPrimary: "#10b981", 
-            themeBorderAccent: "#34d399", appDefaultBackgroundColor: "#f0fdfa",
-            defaultHomepage: "notebooks", viewMode: "compact" 
-        };
+        const initialSettings = { themeSidebarBg: "#047857", themeButtonPrimary: "#10b981", themeBorderAccent: "#34d399", appDefaultBackgroundColor: "#f0fdfa", defaultHomepage: "notebooks", viewMode: "compact" };
         const initialPalette = ["#a7f3d0", "#6ee7b7", "#34d399", "#10b981", "#059669", "#fde047", "#facc15", "#eab308", "#f3f4f6"];
         const initialDefaultColors = [ "#047857", "#10b981", "#34d399", "#f0fdfa"];
-
-        await core.saveAppSettings({ 
-            activeThemeColors: { ...initialSettings }, 
-            defaultThemeColors: [...initialDefaultColors], 
-            paletteColors: [...initialPalette], 
-            defaultHomepage: initialSettings.defaultHomepage,
-            viewMode: initialSettings.viewMode 
-        }); // This will trigger snapshot and UI update via core's listener
+        await core.saveAppSettings({ activeThemeColors: { ...initialSettings }, defaultThemeColors: [...initialDefaultColors], paletteColors: [...initialPalette], defaultHomepage: initialSettings.defaultHomepage, viewMode: initialSettings.viewMode });
         if (confirmThemeResetModal) confirmThemeResetModal.style.display = 'none';
-        // hideLoadingOverlay() will be called by the snapshot listener in core
     });
 
     if (addPaletteColorBtn && newPaletteColorPicker) { 
         addPaletteColorBtn.addEventListener('click', async () => { 
             const paletteLimit = core.PALETTE_BASE_LIMIT + core.localNotebooksCache.length;
-            if (core.paletteColors.length >= paletteLimit) { alert(`Color palette limit reached (${paletteLimit} colors).`); return; }
+            if (core.paletteColors.length >= paletteLimit) { alert(`Palette limit reached (${paletteLimit}).`); return; }
             const newColor = newPaletteColorPicker.value; 
             if (newColor && !core.paletteColors.includes(newColor)) { 
                 core.paletteColors.push(newColor); 
-                try { 
-                    await core.saveAppSettings({ paletteColors: core.paletteColors }); 
-                    renderPaletteColorsUI(); 
-                    newPaletteColorPicker.value = "#000000"; 
-                } catch (e) { core.paletteColors.pop(); updatePaletteLimitMessageUI(); } 
+                try { await core.saveAppSettings({ paletteColors: core.paletteColors }); renderPaletteColorsUI(); newPaletteColorPicker.value = "#000000"; } 
+                catch (e) { core.paletteColors.pop(); updatePaletteLimitMessageUI(); } 
             } else if (core.paletteColors.includes(newColor)) { alert("Color already in palette."); } 
         }); 
     }
@@ -1441,44 +1329,25 @@ document.addEventListener('DOMContentLoaded', () => {
     if (closeCreateNotebookModalBtn) closeCreateNotebookModalBtn.addEventListener('click', () => { if(createNotebookModal) createNotebookModal.style.display = 'none'; if(createNotebookForm) createNotebookForm.reset(); currentSelectedNotebookCoverColor_create = null; });
     if (cancelNotebookCreationBtn) cancelNotebookCreationBtn.addEventListener('click', () => { if(createNotebookModal) createNotebookModal.style.display = 'none'; if(createNotebookForm) createNotebookForm.reset(); currentSelectedNotebookCoverColor_create = null; });
     if (createNotebookForm) createNotebookForm.addEventListener('submit', async (event) => { 
-        event.preventDefault(); 
-        let finalCoverColor = currentSelectedNotebookCoverColor_create;
-        if (!finalCoverColor && core.paletteColors.length > 0) finalCoverColor = core.paletteColors[0]; 
-        else if (!finalCoverColor) finalCoverColor = 'var(--default-notebook-cover-bg)'; 
-        const newNotebook = { 
-            userId: core.PLACEHOLDER_USER_ID, 
-            title: cnNotebookTitleField.value.trim() || "Untitled Notebook", 
-            purpose: cnNotebookPurposeField.value.trim(), 
-            createdAt: core.serverTimestamp(), notesCount: 0, coverColor: finalCoverColor 
-        }; 
-        await core.createNotebook(newNotebook);
-        if(createNotebookModal) createNotebookModal.style.display = 'none'; 
-        createNotebookForm.reset(); currentSelectedNotebookCoverColor_create = null;
+        event.preventDefault(); let finalCoverColor = currentSelectedNotebookCoverColor_create;
+        if (!finalCoverColor && core.paletteColors.length > 0) finalCoverColor = core.paletteColors[0]; else if (!finalCoverColor) finalCoverColor = 'var(--default-notebook-cover-bg)'; 
+        await core.createNotebook({ userId: core.PLACEHOLDER_USER_ID, title: cnNotebookTitleField.value.trim() || "Untitled Notebook", purpose: cnNotebookPurposeField.value.trim(), createdAt: core.serverTimestamp(), notesCount: 0, coverColor: finalCoverColor });
+        if(createNotebookModal) createNotebookModal.style.display = 'none'; createNotebookForm.reset(); currentSelectedNotebookCoverColor_create = null;
     });
 
     if(closeEditNotebookModalBtn_notebook) closeEditNotebookModalBtn_notebook.addEventListener('click', () => { if(editNotebookModal) editNotebookModal.style.display = 'none'; if(editNotebookForm) editNotebookForm.reset(); currentSelectedNotebookCoverColor = null; }); 
     if (cancelNotebookEditBtn) cancelNotebookEditBtn.addEventListener('click', () => { if(editNotebookModal) editNotebookModal.style.display = 'none'; if(editNotebookForm) editNotebookForm.reset(); currentSelectedNotebookCoverColor = null; });
     if (editNotebookForm) editNotebookForm.addEventListener('submit', async (event) => {
         event.preventDefault(); showLoadingOverlay("Saving notebook...");
-        const notebookId = editingNotebookIdField.value;
-        if (!notebookId) { hideLoadingOverlay(); return; }
-        const updates = {
-            title: enNotebookTitleField.value.trim() || "Untitled Notebook",
-            purpose: enNotebookPurposeField.value.trim(),
-            coverColor: currentSelectedNotebookCoverColor 
-        };
-        await core.updateNotebook(notebookId, updates);
-        currentSelectedNotebookCoverColor = null; 
-        if(editNotebookModal) editNotebookModal.style.display = 'none';
-        editNotebookForm.reset(); hideLoadingOverlay();
+        const notebookId = editingNotebookIdField.value; if (!notebookId) { hideLoadingOverlay(); return; }
+        await core.updateNotebook(notebookId, { title: enNotebookTitleField.value.trim() || "Untitled Notebook", purpose: enNotebookPurposeField.value.trim(), coverColor: currentSelectedNotebookCoverColor });
+        currentSelectedNotebookCoverColor = null; if(editNotebookModal) editNotebookModal.style.display = 'none'; editNotebookForm.reset(); hideLoadingOverlay();
     });
     
     if (closeConfirmNotebookDeleteModalBtn) closeConfirmNotebookDeleteModalBtn.addEventListener('click', () => { if(confirmNotebookDeleteModal) confirmNotebookDeleteModal.style.display = 'none'; core.setNotebookToDeleteGlobally({ id: null, name: null }); });
     if (cancelNotebookDeletionBtn) cancelNotebookDeletionBtn.addEventListener('click', () => { if(confirmNotebookDeleteModal) confirmNotebookDeleteModal.style.display = 'none'; core.setNotebookToDeleteGlobally({ id: null, name: null }); });
     if (executeNotebookDeletionBtn) executeNotebookDeletionBtn.addEventListener('click', async () => { 
-        if (core.notebookToDeleteGlobally.id && core.notebookToDeleteGlobally.name) { 
-            await core.performActualNotebookDeletion(core.notebookToDeleteGlobally.id, core.notebookToDeleteGlobally.name); 
-        } 
+        if (core.notebookToDeleteGlobally.id) await core.performActualNotebookDeletion(core.notebookToDeleteGlobally.id, core.notebookToDeleteGlobally.name); 
         if(confirmNotebookDeleteModal) confirmNotebookDeleteModal.style.display = 'none'; core.setNotebookToDeleteGlobally({ id: null, name: null });
     });
     
@@ -1489,47 +1358,47 @@ document.addEventListener('DOMContentLoaded', () => {
     if (closeEditTagModalBtn_tag) closeEditTagModalBtn_tag.addEventListener('click', closeEditTagModal);
     if (cancelEditTagBtn) cancelEditTagBtn.addEventListener('click', closeEditTagModal);
     if (editTagForm) editTagForm.addEventListener('submit', async (event) => {
-        event.preventDefault(); 
-        const tagId = editingTagIdField.value; 
-        const originalName = editingOriginalTagNameField.value; 
-        const newName = etTagNameField.value.trim().toLowerCase(); 
-        const newColor = currentSelectedColorForTagEdit; 
-        const newPurpose = etTagPurposeField.value.trim(); 
+        event.preventDefault(); const tagId = editingTagIdField.value; const originalName = editingOriginalTagNameField.value; 
+        const newName = etTagNameField.value.trim().toLowerCase(); const newColor = currentSelectedColorForTagEdit; const newPurpose = etTagPurposeField.value.trim(); 
         if (!newName) { alert("Tag name cannot be empty."); return; } 
         if (newName !== originalName && core.localTagsCache.some(t => t.name === newName && t.id !== tagId)) { alert(`Tag "${newName}" already exists.`); return; } 
-        await core.saveTagChanges(tagId, originalName, newName, newColor, newPurpose);
-        closeEditTagModal();
+        await core.saveTagChanges(tagId, originalName, newName, newColor, newPurpose); closeEditTagModal();
     });
     if (deleteTagBtn) deleteTagBtn.addEventListener('click', () => {
-        if (deleteTagBtn && deleteTagBtn.disabled) return; 
-        const tagId = editingTagIdField.value; const tagName = editingOriginalTagNameField.value; 
-        if (!tagId || !tagName) return; 
-        core.setTagToDeleteGlobally({ id: tagId, name: tagName });
-        if(deleteTagBtn) deleteTagBtn.disabled = true; 
-        if (tagNameToDeleteDisplay) tagNameToDeleteDisplay.textContent = tagName; 
-        if (confirmTagDeleteModal) confirmTagDeleteModal.style.display = 'flex';
+        if (deleteTagBtn.disabled) return; const tagId = editingTagIdField.value; const tagName = editingOriginalTagNameField.value; 
+        if (!tagId || !tagName) return; core.setTagToDeleteGlobally({ id: tagId, name: tagName });
+        deleteTagBtn.disabled = true; if (tagNameToDeleteDisplay) tagNameToDeleteDisplay.textContent = tagName; if (confirmTagDeleteModal) confirmTagDeleteModal.style.display = 'flex';
     });
     if (closeConfirmTagDeleteModalBtn) closeConfirmTagDeleteModalBtn.addEventListener('click', closeConfirmTagDeleteModal);
     if (cancelTagDeletionBtn) cancelTagDeletionBtn.addEventListener('click', closeConfirmTagDeleteModal);
     if (executeTagDeletionBtn) executeTagDeletionBtn.addEventListener('click', async () => { 
-        if (core.tagToDeleteGlobally.id && core.tagToDeleteGlobally.name) {
-            await core.performActualTagDeletion(core.tagToDeleteGlobally.id, core.tagToDeleteGlobally.name);
-        }
+        if (core.tagToDeleteGlobally.id) await core.performActualTagDeletion(core.tagToDeleteGlobally.id, core.tagToDeleteGlobally.name);
         closeConfirmTagDeleteModal(); closeEditTagModal(); 
     });
 
-    if(noteTitleInputField_panel) noteTitleInputField_panel.addEventListener('input', core.debouncedHandleInteractionPanelInputChange);
-    if(noteTextInputField_panel) noteTextInputField_panel.addEventListener('input', core.debouncedHandleInteractionPanelInputChange);
-    if(interactionPanelActivityInputField) interactionPanelActivityInputField.addEventListener('input', () => {if(isAdminModeEnabled || core.isNewNoteSessionInPanel || core.activelyCreatingNoteId === core.currentInteractingNoteIdInPanel) core.debouncedHandleInteractionPanelInputChange()});
-    if(interactionPanelCreationDateInputField) interactionPanelCreationDateInputField.addEventListener('input', () => {if(isAdminModeEnabled) core.debouncedHandleInteractionPanelInputChange();});
-    if(interactionPanelCreationTimeInputField_time) interactionPanelCreationTimeInputField_time.addEventListener('input', () => {if(isAdminModeEnabled) core.debouncedHandleInteractionPanelInputChange();});
-    if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.addEventListener('input', core.debouncedSaveEditDescription);
+    const setupAutosaveInputListener = (inputElement) => {
+        if (inputElement) {
+            inputElement.addEventListener('input', () => {
+                updateAutosaveStatusUI('unsaved');
+                core.debouncedHandleInteractionPanelInputChange();
+            });
+        }
+    };
+    setupAutosaveInputListener(noteTitleInputField_panel);
+    setupAutosaveInputListener(noteTextInputField_panel);
+    setupAutosaveInputListener(interactionPanelActivityInputField); // Will only trigger save if admin/new
+    setupAutosaveInputListener(interactionPanelCreationDateInputField); // Will only trigger save if admin
+    setupAutosaveInputListener(interactionPanelCreationTimeInputField_time); // Will only trigger save if admin
+    if(interactionPanelEditsMadeInputField) interactionPanelEditsMadeInputField.addEventListener('input', () => {
+        updateAutosaveStatusUI('unsaved', 'Editing session notes...'); // More specific message
+        core.debouncedSaveEditDescription();
+    });
+
 
     if (adminModeToggle) adminModeToggle.addEventListener('change', () => { 
         isAdminModeEnabled = adminModeToggle.checked; 
-        if (core.currentInteractingNoteIdInPanel && !core.isNewNoteSessionInPanel) {
-            displayNoteInInteractionPanel(core.currentInteractingNoteIdInPanel, false);
-        } else if (core.isNewNoteSessionInPanel && !core.currentInteractingNoteIdInPanel) {
+        if (core.currentInteractingNoteIdInPanel && !core.isNewNoteSessionInPanel) displayNoteInInteractionPanel(core.currentInteractingNoteIdInPanel, false);
+        else if (core.isNewNoteSessionInPanel && !core.currentInteractingNoteIdInPanel) {
             const tempNotebook = core.localNotebooksCache.find(nb => nb.id === core.currentOpenNotebookIdForPanel);
             setupPanelForNewNote(core.currentOpenNotebookIdForPanel, tempNotebook ? tempNotebook.title : "Selected Notebook");
         }
@@ -1558,15 +1427,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (core.currentNoteTagsArrayInPanel.length >= 5) { alert("Max 5 tags."); noteTagsInputField_panel.value = ''; return; }
                 const newTagName = noteTagsInputField_panel.value.trim().toLowerCase();
                 if (newTagName && !core.currentNoteTagsArrayInPanel.includes(newTagName)) {
-                    core.currentNoteTagsArrayInPanel.push(newTagName); // Modify core's array
+                    core.currentNoteTagsArrayInPanel.push(newTagName); 
                     await core.updateGlobalTagsFromNoteInput([newTagName]); 
-                    renderTagPillsInPanelUI();
-                    core.debouncedHandleInteractionPanelInputChange();
+                    renderTagPillsInPanelUI(); updateAutosaveStatusUI('unsaved'); core.debouncedHandleInteractionPanelInputChange();
                 }
                 noteTagsInputField_panel.value = '';
             } else if (event.key === 'Backspace' && noteTagsInputField_panel.value === '' && core.currentNoteTagsArrayInPanel.length > 0) {
-                event.preventDefault();
-                core.currentNoteTagsArrayInPanel.pop(); renderTagPillsInPanelUI(); core.debouncedHandleInteractionPanelInputChange();
+                event.preventDefault(); core.currentNoteTagsArrayInPanel.pop(); renderTagPillsInPanelUI(); updateAutosaveStatusUI('unsaved'); core.debouncedHandleInteractionPanelInputChange();
             }
         });
         noteTagsInputField_panel.addEventListener('blur', () => {
@@ -1575,9 +1442,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (core.currentNoteTagsArrayInPanel.length >= 5 && !core.currentNoteTagsArrayInPanel.includes(newTagName)) { alert("Max 5 tags."); } 
                 else if (!core.currentNoteTagsArrayInPanel.includes(newTagName)) {
                     core.currentNoteTagsArrayInPanel.push(newTagName);
-                    core.updateGlobalTagsFromNoteInput([newTagName]).then(() => { renderTagPillsInPanelUI(); core.debouncedHandleInteractionPanelInputChange(); });
-                } else { core.debouncedHandleInteractionPanelInputChange(); }
-            } else { core.debouncedHandleInteractionPanelInputChange(); }
+                    core.updateGlobalTagsFromNoteInput([newTagName]).then(() => { renderTagPillsInPanelUI(); updateAutosaveStatusUI('unsaved'); core.debouncedHandleInteractionPanelInputChange(); });
+                } else { updateAutosaveStatusUI('unsaved'); core.debouncedHandleInteractionPanelInputChange(); }
+            } else { updateAutosaveStatusUI('unsaved'); core.debouncedHandleInteractionPanelInputChange(); }
             noteTagsInputField_panel.value = ''; 
         });
     }
@@ -1609,17 +1476,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const jsonString = JSON.stringify(exportData, null, 2);
             const blob = new Blob([jsonString], { type: 'application/json' });
             const filename = `${sanitizeFilename(exportData.title)}_export.json`;
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob); link.download = filename;
+            const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = filename;
             document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(link.href);
             exportStatusMessage.textContent = `Exported "${exportData.title}" successfully!`; exportStatusMessage.style.color = 'var(--theme-bg-button-primary)';
-        } catch (error) {
-            console.error("Error exporting notebook:", error);
-            exportStatusMessage.textContent = "Error exporting notebook."; exportStatusMessage.style.color = 'red';
+        } catch (error) { console.error("Error exporting notebook:", error); exportStatusMessage.textContent = "Error exporting notebook."; exportStatusMessage.style.color = 'red';
         } finally { exportNotebookBtn.disabled = false; }
     });
 
-    // Global modal click listeners
     window.addEventListener('click', (event) => { 
         if (event.target === createNotebookModal) { createNotebookModal.style.display = 'none'; createNotebookForm.reset(); currentSelectedNotebookCoverColor_create = null; } 
         if (event.target === editTagModal) closeEditTagModal(); 
@@ -1632,15 +1495,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.target === confirmEmptyTrashModal) { confirmEmptyTrashModal.style.display = 'none'; } 
     });
 
-    // Initial UI state that might depend on core data already being somewhat initialized by listeners
-    // For example, if defaultHomepage is 'notes', core.initializeDataListeners will call setupNotesListenerAndLoadInitialBatch.
-    // This renderAllNotesPreviews() is a fallback or reinforcement.
     if (core.themeSettings.defaultHomepage === 'notes' || core.themeSettings.defaultHomepage === 'favorites') {
-        // This is now handled by the onSnapshot callback in core.initializeDataListeners -> appSettings
+        // Handled by initializeDataListeners
     } else if (notebooksContentDiv && core.themeSettings.defaultHomepage === 'notebooks') {
         renderNotebooksOnPage();
     }
-    renderTagsInSettings(); // Render based on initial empty or loaded cache
-    clearInteractionPanelUI(false); // Ensure panel is initially clear
-
-}); // End DOMContentLoaded
+    renderTagsInSettings(); 
+    clearInteractionPanelUI(false); 
+});

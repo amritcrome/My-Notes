@@ -6,7 +6,7 @@
     <title>Memoir - Notes App</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@bhu9/style.css"> 
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@bhuu/style.css"> 
     <style>
         :root {
             --theme-app-default-bg: #f0fdfa;
@@ -37,14 +37,20 @@
         .selected .delete-note-icon i {
             color: #f87171 !important; 
         }
-        /* Ensure textarea in flex column grows */
         #interactionPanelForm textarea#noteTextInputField_panel {
-            min-height: 200px; /* Minimum height */
+            min-height: 200px; 
         }
-        @media (min-width: 768px) { /* md breakpoint */
+        @media (min-width: 768px) { 
              #interactionPanelForm textarea#noteTextInputField_panel {
                 min-height: 300px;
             }
+        }
+        /* Styles for autosave status */
+        #autosaveStatusContainer {
+            transition: opacity 0.3s ease-in-out;
+        }
+        .fa-spin-custom {
+            animation: fa-spin 1s infinite linear;
         }
 
     </style>
@@ -110,6 +116,10 @@
                                 </div>
 
                                 <div class="flex flex-col w-1/3 md:w-2/5 space-y-4 pl-2 overflow-y-auto">
+                                    <div id="autosaveStatusContainer" class="flex items-center text-sm mb-1" style="display: none;">
+                                        <i id="autosaveStatusIcon" class="fas mr-2"></i>
+                                        <span id="autosaveStatusText"></span>
+                                    </div>
                                     <div id="panelNotebookSelectorContainer" style="display:none;">
                                         <label for="panelNotebookSelector" class="block text-sm font-medium text-gray-700">Notebook:</label>
                                         <select id="panelNotebookSelector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)] sm:text-sm rounded-md"></select>
@@ -244,7 +254,7 @@
         </div>
 
         <div id="trash-content" class="main-view-content p-6 hidden">
-             <div class="flex justify-between items-center mb-6">
+            <div class="flex justify-between items-center mb-6">
                 <h1 class="text-3xl font-bold text-gray-800">Trash</h1>
                 <button id="emptyTrashBtn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md shadow-sm disabled:opacity-50">Empty Trash</button>
             </div>
@@ -440,7 +450,7 @@
         </div>
     </div>
 
-    <script type="module" src="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@bhu9/core-logic.js"></script>
-    <script type="module" src="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@bhu9/ui-handlers.js"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@bhuu/core-logic.js"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@bhuu/ui-handlers.js"></script>
 </body>
 </html>
