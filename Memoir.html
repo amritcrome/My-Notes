@@ -6,9 +6,8 @@
     <title>Memoir - Notes App</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@bhu8/style.css"> 
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@main/style.css"> 
     <style>
-        /* Basic theme variable fallbacks (will be overridden by JS) */
         :root {
             --theme-app-default-bg: #f0fdfa;
             --theme-bg-sidebar: #047857;
@@ -19,14 +18,7 @@
             --theme-text-on-dark: #FFFFFF;
             --default-notebook-cover-bg: #e0e0e0;
         }
-        /* Additional styles for view modes if needed */
-        .view-mode-comfortable .notes-preview-column {
-            /* Styles for grid view in comfortable mode */
-        }
-        .view-mode-comfortable .note-interaction-panel {
-            /* Styles for editor view in comfortable mode */
-        }
-        .selected { /* For selected note preview in compact mode */
+        .selected { 
             background-color: var(--theme-bg-sidebar) !important;
             color: var(--theme-text-on-dark) !important;
         }
@@ -34,16 +26,25 @@
             color: var(--theme-text-on-dark) !important;
         }
         .selected .note-preview-notebook-name {
-             color: #d1d5db !important; /* Lighter gray for selected notebook name */
+             color: #d1d5db !important; 
         }
         .selected .favorite-star i {
-            color: var(--theme-text-on-dark) !important; /* Adjust if needed */
+            color: var(--theme-text-on-dark) !important; 
         }
         .selected .favorite-star.is-favorite i {
-            color: #FBBF24 !important; /* Gold for favorite on selected */
+            color: #FBBF24 !important; 
         }
         .selected .delete-note-icon i {
-            color: #f87171 !important; /* Lighter red for selected */
+            color: #f87171 !important; 
+        }
+        /* Ensure textarea in flex column grows */
+        #interactionPanelForm textarea#noteTextInputField_panel {
+            min-height: 200px; /* Minimum height */
+        }
+        @media (min-width: 768px) { /* md breakpoint */
+             #interactionPanelForm textarea#noteTextInputField_panel {
+                min-height: 300px;
+            }
         }
 
     </style>
@@ -78,69 +79,68 @@
 
         <div id="notebooks-content" class="main-view-content p-6 hidden">
             <h1 class="text-3xl font-bold text-gray-800 mb-6">Notebooks</h1>
-            <div id="notebooksPageListContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                </div>
+            <div id="notebooksPageListContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
             <p id="notebooksPageNoNotebooksMessage" class="text-center text-gray-500 mt-10 hidden">No notebooks yet. Create one to get started!</p>
         </div>
 
         <div id="notes-content" class="main-view-content hidden h-screen flex flex-col">
             <div class="p-4 md:p-6 border-b border-gray-200 bg-white sticky top-0 z-10">
                  <h1 id="allNotesPageTitle" class="text-2xl font-bold text-gray-800">All Notes</h1>
-                 <div id="notebookHeaderDisplay" class="mt-1" style="display: none;">
-                    </div>
-                 <div id="allNotesSearchContainer" class="mt-4" style="display: none;">
+                 <div id="notebookHeaderDisplay" class="mt-1" style="display: none;"></div>
+                <div id="allNotesSearchContainer" class="mt-4" style="display: none;">
                     <input type="search" id="allNotesSearchInput" placeholder="Search current notes..." class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)] outline-none transition duration-150 ease-in-out">
                 </div>
             </div>
-
             <div class="flex-grow flex overflow-hidden">
                 <div id="notesPreviewColumnOuter" class="notes-preview-column w-full md:w-1/3 lg:w-1/4 border-r border-gray-200 bg-gray-50 flex flex-col overflow-hidden">
-                    <div id="notesListScrollableArea" class="flex-grow overflow-y-auto p-3 space-y-2">
-                        </div>
+                    <div id="notesListScrollableArea" class="flex-grow overflow-y-auto p-3 space-y-2"></div>
                     <p id="noNotesMessage" class="text-center text-gray-500 p-6 hidden">No notes found.</p>
                 </div>
-
-                <div id="noteInteractionPanel" class="note-interaction-panel flex-grow p-2 md:p-6 bg-white overflow-y-auto flex flex-col">
-                    <div id="noteInteractionPanelPlaceholder" class="flex-grow flex flex-col items-center justify-center text-gray-400">
+                <div id="noteInteractionPanel" class="note-interaction-panel flex-grow bg-white overflow-y-auto flex flex-col">
+                    <div id="noteInteractionPanelPlaceholder" class="flex-grow flex flex-col items-center justify-center text-gray-400 p-6">
                         <i class="fas fa-feather fa-3x mb-4"></i>
                         <p>Select a note to view or create a new one.</p>
                     </div>
-                    <div id="noteInteractionFormContainer" class="hidden flex-grow flex flex-col">
-                        <form id="interactionPanelForm" class="flex-grow flex flex-col space-y-4">
-                            <input type="text" id="noteTitleInputField_panel" placeholder="Note Title" class="text-2xl font-semibold p-2 border-b-2 border-gray-200 focus:border-[var(--theme-border-accent)] outline-none transition-colors">
-                            
-                            <div id="panelNotebookSelectorContainer" class="mt-2" style="display:none;">
-                                <label for="panelNotebookSelector" class="block text-sm font-medium text-gray-700">Notebook:</label>
-                                <select id="panelNotebookSelector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)] sm:text-sm rounded-md"></select>
-                                <p id="notebookChangeConfirmation" class="text-xs text-green-600 mt-1"></p>
-                            </div>
-
-                            <textarea id="noteTextInputField_panel" placeholder="Start writing your note..." class="flex-grow p-2 border border-gray-200 rounded-md focus:border-[var(--theme-border-accent)] focus:ring-1 focus:ring-[var(--theme-border-accent)] outline-none resize-none leading-relaxed"></textarea>
-                            
-                            <div class="mt-2">
-                                <label class="block text-sm font-medium text-gray-700 mb-1">Tags (up to 5, comma or Enter to add):</label>
-                                <div id="noteTagsContainer_panel" class="flex flex-wrap items-center p-2 border border-gray-200 rounded-md">
-                                    <input type="text" id="noteTagsInputField_panel" placeholder="Add tag..." class="flex-grow outline-none p-1 text-sm">
+                    <div id="noteInteractionFormContainer" class="hidden flex-grow flex flex-col p-2 md:p-6">
+                        <form id="interactionPanelForm" class="flex-grow flex flex-col">
+                            <div class="flex flex-row flex-grow gap-x-4 md:gap-x-6 overflow-hidden">
+                                <div class="flex flex-col w-2/3 md:w-3/5 space-y-4 pr-2 overflow-y-auto">
+                                    <input type="text" id="noteTitleInputField_panel" placeholder="Note Title" class="text-2xl font-semibold p-2 border-b-2 border-gray-200 focus:border-[var(--theme-border-accent)] outline-none transition-colors">
+                                    <textarea id="noteTextInputField_panel" placeholder="Start writing your note..." class="flex-grow p-2 border border-gray-200 rounded-md focus:border-[var(--theme-border-accent)] focus:ring-1 focus:ring-[var(--theme-border-accent)] outline-none resize-none leading-relaxed"></textarea>
                                 </div>
-                            </div>
 
-                            <div id="panelCreationTimeContainer" class="mt-2 text-sm" style="display:none;">
-                                <div id="interactionPanelCreationTimeDisplayField" class="flex items-center text-gray-600">
-                                    <i class="far fa-calendar-alt mr-2"></i>
-                                    <span></span> </div>
-                                <div id="interactionPanelCreationTimeInputsContainer" class="flex items-center space-x-2" style="display:none;">
-                                    <input type="date" id="interactionPanelCreationDateInputField" class="p-1 border rounded-md text-xs">
-                                    <input type="time" id="interactionPanelCreationTimeInputField_time" class="p-1 border rounded-md text-xs">
+                                <div class="flex flex-col w-1/3 md:w-2/5 space-y-4 pl-2 overflow-y-auto">
+                                    <div id="panelNotebookSelectorContainer" style="display:none;">
+                                        <label for="panelNotebookSelector" class="block text-sm font-medium text-gray-700">Notebook:</label>
+                                        <select id="panelNotebookSelector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)] sm:text-sm rounded-md"></select>
+                                        <p id="notebookChangeConfirmation" class="text-xs text-green-600 mt-1"></p>
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 mb-1">Tags (up to 5):</label>
+                                        <div id="noteTagsContainer_panel" class="flex flex-wrap items-center p-2 border border-gray-200 rounded-md">
+                                            <input type="text" id="noteTagsInputField_panel" placeholder="Add tag..." class="flex-grow outline-none p-1 text-sm">
+                                        </div>
+                                    </div>
+                                    <div id="panelCreationTimeContainer" class="text-sm" style="display:none;">
+                                        <div id="interactionPanelCreationTimeDisplayField" class="flex items-center text-gray-600">
+                                            <i class="far fa-calendar-alt mr-2"></i>
+                                            <span></span>
+                                        </div>
+                                        <div id="interactionPanelCreationTimeInputsContainer" class="flex items-center space-x-2" style="display:none;">
+                                            <input type="date" id="interactionPanelCreationDateInputField" class="p-1 border rounded-md text-xs">
+                                            <input type="time" id="interactionPanelCreationTimeInputField_time" class="p-1 border rounded-md text-xs">
+                                        </div>
+                                    </div>
+                                    <div id="panelActivityContainer" style="display:none;">
+                                        <label for="interactionPanelActivityInputField" class="block text-sm font-medium text-gray-700">Activity:</label>
+                                        <input type="text" id="interactionPanelActivityInputField" placeholder="e.g., Reading, Coding" class="mt-1 p-2 w-full border border-gray-300 rounded-md text-sm">
+                                        <p id="interactionPanelActivityDisplayField" class="text-sm text-gray-600 mt-1" style="display:none;"></p>
+                                    </div>
+                                    <div id="interactionPanelCurrentEditSessionContainer" style="display:none;">
+                                        <label for="interactionPanelEditsMadeInputField" class="block text-sm font-medium text-gray-700">My Edits (this session):</label>
+                                        <textarea id="interactionPanelEditsMadeInputField" placeholder="Describe changes..." class="mt-1 p-2 w-full border border-gray-300 rounded-md text-sm h-16 resize-none"></textarea>
+                                    </div>
                                 </div>
-                            </div>
-                            <div id="panelActivityContainer" class="mt-2" style="display:none;">
-                                <label for="interactionPanelActivityInputField" class="block text-sm font-medium text-gray-700">Activity:</label>
-                                <input type="text" id="interactionPanelActivityInputField" placeholder="e.g., Reading, Coding" class="mt-1 p-2 w-full border border-gray-300 rounded-md text-sm">
-                                <p id="interactionPanelActivityDisplayField" class="text-sm text-gray-600 mt-1" style="display:none;"></p>
-                            </div>
-                            <div id="interactionPanelCurrentEditSessionContainer" class="mt-2" style="display:none;">
-                                <label for="interactionPanelEditsMadeInputField" class="block text-sm font-medium text-gray-700">My Edits (this session):</label>
-                                <textarea id="interactionPanelEditsMadeInputField" placeholder="Describe changes made in this session..." class="mt-1 p-2 w-full border border-gray-300 rounded-md text-sm h-16 resize-none"></textarea>
                             </div>
                         </form>
                         <div id="noteInfoPanelContainer" class="mt-auto pt-4 border-t border-gray-200 text-xs text-gray-600 space-y-1" style="display:none;">
@@ -225,18 +225,16 @@
                             <button id="resetThemeBtn" class="w-full mt-4 px-4 py-2 text-sm font-medium bg-[var(--theme-bg-button-primary)] hover:bg-[var(--theme-bg-button-primary-hover)] rounded-md shadow-sm">Reset to Default Theme</button>
                         </div>
                     </div>
-                     <div id="tags-settings-section" class="settings-content-section hidden">
+                    <div id="tags-settings-section" class="settings-content-section hidden">
                         <h2 class="text-xl font-semibold text-gray-700 mb-4">Manage Tags</h2>
-                        <div id="settingsTagsListContainer" class="space-y-3">
-                            </div>
+                        <div id="settingsTagsListContainer" class="space-y-3"></div>
                         <p id="settingsNoTagsMessage" class="text-center text-gray-500 mt-6 hidden">No tags created yet.</p>
                     </div>
                     <div id="export-settings-section" class="settings-content-section hidden">
                         <h2 class="text-xl font-semibold text-gray-700 mb-4">Export Data</h2>
                         <div class="bg-white p-6 rounded-lg shadow">
                             <label for="exportNotebookSelector" class="block text-sm font-medium text-gray-700">Select Notebook to Export</label>
-                            <select id="exportNotebookSelector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)] sm:text-sm rounded-md">
-                                </select>
+                            <select id="exportNotebookSelector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)] sm:text-sm rounded-md"></select>
                             <button id="exportNotebookBtn" class="mt-4 w-full px-4 py-2 text-sm font-medium bg-[var(--theme-bg-button-primary)] hover:bg-[var(--theme-bg-button-primary-hover)] rounded-md shadow-sm">Export Notebook (JSON)</button>
                             <p id="exportStatusMessage" class="text-sm mt-2"></p>
                         </div>
@@ -246,12 +244,11 @@
         </div>
 
         <div id="trash-content" class="main-view-content p-6 hidden">
-            <div class="flex justify-between items-center mb-6">
+             <div class="flex justify-between items-center mb-6">
                 <h1 class="text-3xl font-bold text-gray-800">Trash</h1>
                 <button id="emptyTrashBtn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md shadow-sm disabled:opacity-50">Empty Trash</button>
             </div>
-            <div id="deletedNotesListContainer" class="space-y-3">
-                </div>
+            <div id="deletedNotesListContainer" class="space-y-3"></div>
             <p id="noDeletedNotesMessage" class="text-center text-gray-500 mt-10 hidden">Trash is empty.</p>
         </div>
 
@@ -261,7 +258,6 @@
         <button id="fabNavigateBack" class="fixed bottom-6 left-36 bg-gray-600 hover:bg-gray-700 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl z-30 transition-transform hover:scale-110 hidden">
             <i class="fas fa-arrow-left"></i>
         </button>
-
     </main>
 
     <div id="createNotebookModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-40 hidden">
@@ -444,7 +440,7 @@
         </div>
     </div>
 
-    <script type="module" src="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@bhu8/core-logic.js"></script>
-    <script type="module" src="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@bhu8/ui-handlers.js"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@main/core-logic.js"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@main/ui-handlers.js"></script>
 </body>
 </html>
