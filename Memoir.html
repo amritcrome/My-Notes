@@ -1,488 +1,450 @@
-            <!DOCTYPE html>
-            <html lang="en">
-            <head>
-                <meta charset="UTF-8">
-                <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>Notes App - UI Overhaul</title>
-                <script src="https://cdn.tailwindcss.com"></script>
-                <link href="https://fonts.googleapis.com/css2?family=Sulphur+Point:wght@300;400;700&display=swap" rel="stylesheet">
-                <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" xintegrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-                
-                <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@bhu7/style.css">
-            </head>
-            <body class="antialiased text-slate-800">
-                <div id="loadingOverlay">
-                    <i class="fas fa-spinner fa-spin fa-2x mr-3"></i> Loading App...
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memoir - Notes App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@main/style.css"> 
+    <style>
+        /* Basic theme variable fallbacks (will be overridden by JS) */
+        :root {
+            --theme-app-default-bg: #f0fdfa;
+            --theme-bg-sidebar: #047857;
+            --theme-bg-sidebar-hover: #059669;
+            --theme-bg-button-primary: #10b981;
+            --theme-bg-button-primary-hover: #059669;
+            --theme-border-accent: #34d399;
+            --theme-text-on-dark: #FFFFFF;
+            --default-notebook-cover-bg: #e0e0e0;
+        }
+        /* Additional styles for view modes if needed */
+        .view-mode-comfortable .notes-preview-column {
+            /* Styles for grid view in comfortable mode */
+        }
+        .view-mode-comfortable .note-interaction-panel {
+            /* Styles for editor view in comfortable mode */
+        }
+        .selected { /* For selected note preview in compact mode */
+            background-color: var(--theme-bg-sidebar) !important;
+            color: var(--theme-text-on-dark) !important;
+        }
+        .selected h4, .selected .note-content-preview {
+            color: var(--theme-text-on-dark) !important;
+        }
+        .selected .note-preview-notebook-name {
+             color: #d1d5db !important; /* Lighter gray for selected notebook name */
+        }
+        .selected .favorite-star i {
+            color: var(--theme-text-on-dark) !important; /* Adjust if needed */
+        }
+        .selected .favorite-star.is-favorite i {
+            color: #FBBF24 !important; /* Gold for favorite on selected */
+        }
+        .selected .delete-note-icon i {
+            color: #f87171 !important; /* Lighter red for selected */
+        }
+
+    </style>
+</head>
+<body class="font-sans bg-[var(--theme-app-default-bg)] flex view-mode-compact">
+
+    <div id="loadingOverlay" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 text-white text-lg hidden">
+        <i class="fas fa-spinner fa-spin fa-2x mr-3"></i> Loading...
+    </div>
+
+    <aside id="appSidebar" class="bg-[var(--theme-bg-sidebar)] text-[var(--theme-text-on-dark)] w-28 p-4 space-y-6 fixed top-0 left-0 h-full shadow-lg transition-all duration-300 ease-in-out flex flex-col">
+        <div class="text-2xl font-bold text-center mb-4">
+            <i class="fas fa-feather-alt"></i> Memoir
+        </div>
+        <nav class="flex-grow">
+            <ul class="space-y-2">
+                <li><button id="sidebarNotebooksPageBtn" class="w-full flex flex-col items-center py-2.5 px-4 rounded-lg hover:bg-[var(--theme-bg-sidebar-hover)] transition-colors duration-150"><i class="fas fa-book mb-1"></i> Notebooks</button></li>
+                <li><button id="sidebarAllNotesBtn" class="w-full flex flex-col items-center py-2.5 px-4 rounded-lg hover:bg-[var(--theme-bg-sidebar-hover)] transition-colors duration-150"><i class="fas fa-sticky-note mb-1"></i> All Notes</button></li>
+                <li><button id="sidebarFavoritesBtn" class="w-full flex flex-col items-center py-2.5 px-4 rounded-lg hover:bg-[var(--theme-bg-sidebar-hover)] transition-colors duration-150"><i class="fas fa-star mb-1"></i> Favorites</button></li>
+                <li><button id="sidebarTrashBtn" class="w-full flex flex-col items-center py-2.5 px-4 rounded-lg hover:bg-[var(--theme-bg-sidebar-hover)] transition-colors duration-150"><i class="fas fa-trash-alt mb-1"></i> Trash</button></li>
+            </ul>
+        </nav>
+        <div>
+            <button id="sidebarSettingsBtn" class="w-full flex flex-col items-center py-2.5 px-4 rounded-lg hover:bg-[var(--theme-bg-sidebar-hover)] transition-colors duration-150"><i class="fas fa-cog mb-1"></i> Settings</button>
+        </div>
+    </aside>
+
+    <main class="main-content-area flex-1 ml-28 p-0 md:p-0 bg-[var(--theme-app-default-bg)] transition-all duration-300 ease-in-out">
+        <button id="hamburgerBtn" class="md:hidden fixed top-4 left-4 z-20 text-gray-700">
+            <i class="fas fa-bars fa-lg"></i>
+        </button>
+
+        <div id="notebooks-content" class="main-view-content p-6 hidden">
+            <h1 class="text-3xl font-bold text-gray-800 mb-6">Notebooks</h1>
+            <div id="notebooksPageListContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                </div>
+            <p id="notebooksPageNoNotebooksMessage" class="text-center text-gray-500 mt-10 hidden">No notebooks yet. Create one to get started!</p>
+        </div>
+
+        <div id="notes-content" class="main-view-content hidden h-screen flex flex-col">
+            <div class="p-4 md:p-6 border-b border-gray-200 bg-white sticky top-0 z-10">
+                 <h1 id="allNotesPageTitle" class="text-2xl font-bold text-gray-800">All Notes</h1>
+                 <div id="notebookHeaderDisplay" class="mt-1" style="display: none;">
+                    </div>
+                 <div id="allNotesSearchContainer" class="mt-4" style="display: none;">
+                    <input type="search" id="allNotesSearchInput" placeholder="Search current notes..." class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)] outline-none transition duration-150 ease-in-out">
+                </div>
+            </div>
+
+            <div class="flex-grow flex overflow-hidden">
+                <div id="notesPreviewColumnOuter" class="notes-preview-column w-full md:w-1/3 lg:w-1/4 border-r border-gray-200 bg-gray-50 flex flex-col overflow-hidden">
+                    <div id="notesListScrollableArea" class="flex-grow overflow-y-auto p-3 space-y-2">
+                        </div>
+                    <p id="noNotesMessage" class="text-center text-gray-500 p-6 hidden">No notes found.</p>
                 </div>
 
-                <div class="app-shell">
-                    <aside id="appSidebar" class="sidebar">
-                        <div class="sidebar-main-navigation"> 
-                            <button id="hamburgerBtn" class="sidebar-icon" title="Toggle Menu">
-                                <i class="fas fa-bars fa-lg"></i>
-                                <span class="sidebar-text">Menu</span>
-                            </button>
-                            <button id="sidebarNotebooksPageBtn" class="sidebar-icon" title="Notebooks">
-                                <i class="fas fa-book fa-lg"></i>
-                                <span class="sidebar-text">Notebooks</span>
-                            </button>
-                            <button id="sidebarAllNotesBtn" class="sidebar-icon" title="All Notes">
-                                <i class="fas fa-sticky-note fa-lg"></i>
-                                <span class="sidebar-text">All Notes</span>
-                            </button>
-                            <button id="sidebarFavoritesBtn" class="sidebar-icon" title="Favorites">
-                                <i class="fas fa-star fa-lg"></i>
-                                <span class="sidebar-text">Favorites</span>
-                            </button>
-                            <button id="sidebarTrashBtn" class="sidebar-icon" title="Trash">
-                                <i class="fas fa-trash-alt fa-lg"></i>
-                                <span class="sidebar-text">Trash</span>
-                            </button>
-                        </div>
-                        <div class="sidebar-bottom-icons"> 
-                            <button id="sidebarSettingsBtn" class="sidebar-icon" title="Settings">
-                                <i class="fas fa-cog fa-lg"></i>
-                                <span class="sidebar-text">Settings</span>
-                            </button>
-                        </div>
-                    </aside>
-
-                    <main class="main-content-area">
-                        <div class="w-full h-full flex flex-col"> 
-                            <div id="notebooks-content" class="main-view-content p-2 bg-white rounded-lg shadow">
-                                <div class="flex justify-between items-center mb-4 flex-shrink-0">
-                                    <h2 class="text-xl font-semibold text-gray-700">My Notebooks</h2>
-                                </div>
-                                <div id="notebooksPageListContainer" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 pr-2">
-                                    <p id="notebooksPageNoNotebooksMessage" class="text-gray-500 text-center py-4 md:col-span-full">No notebooks yet. Click "Create Notebook" to get started!</p>
-                                </div>
-                            </div>
-
-                            <div id="notes-content" class="main-view-content p-2 bg-white rounded-lg shadow"> 
-                                <div id="notebookHeaderDisplay" style="display: none;" class="mb-3"></div>
-                                <div class="all-notes-container">
-                                    <div id="notesPreviewColumnOuter" class="notes-preview-column"> 
-                                        <h2 class="text-xl font-semibold mb-3 text-gray-700 px-1 flex-shrink-0" id="allNotesPageTitle">All Notes</h2>
-                                        <div id="allNotesSearchContainer" class="my-4 px-4 md:px-0" style="display: none;">
-    <input type="search" id="allNotesSearchInput" placeholder="Search current notes..." class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)] outline-none transition duration-150 ease-in-out">
-</div>
-                                        <div id="notesListScrollableArea" class="space-y-2 pr-1">
-                                            <p class="text-gray-500 text-center py-4" id="noNotesMessage">No notes yet. Create some!</p>
-                                        </div>
-                                    </div>
-                                    <div id="noteInteractionPanel" class="note-interaction-panel">
-                                        <div id="noteInteractionPanelPlaceholder" class="text-center text-gray-400 p-6 flex-grow flex items-center justify-center"> 
-                                            <p>Select a note from the left to edit, or click a notebook to create a new note here.</p>
-                                        </div>
-                                        <div id="noteInteractionFormContainer" style="display: none;" class="note-interaction-panel-content flex flex-col flex-grow min-h-0">
-                                            <form id="interactionPanelForm" class="h-full flex flex-col pt-2">
-                                                <div class="md:flex md:space-x-4 flex-grow min-h-0"> 
-                                                    <div class="md:w-2/3 space-y-3 flex flex-col">
-                                                        <div><label for="noteTitleInputField_panel" class="block text-sm font-medium text-gray-700 mb-1">Note Title</label><input type="text" id="noteTitleInputField_panel" class="input-field" placeholder="My Awesome Note"></div>
-                                                        <div class="flex-grow flex flex-col min-h-0 relative"> <label for="noteTextInputField_panel" class="block text-sm font-medium text-gray-700 mb-1">Note Text</label>
-                                                            <textarea id="noteTextInputField_panel" class="input-field flex-grow" placeholder="Start writing..."></textarea>
-                                                            
-                                                            <div id="noteInfoPanelContainer" class="mt-auto" style="display:none;">
-                                                                <div class="note-info-title-bar">
-                                                                    <h4 class="text-sm font-semibold text-gray-700">Note Information</h4>
-                                                                </div>
-                                                                <div class="note-info-content-wrapper">
-                                                                    <div id="noteInfoTags" style="display: none;" class="text-xs text-gray-600 space-y-0.5"><strong>Tags:</strong> <span id="noteInfoTagsValue"></span></div>
-                                                                    <div id="noteInfoCreated" style="display: none;" class="text-xs text-gray-600 space-y-0.5"><strong>First Created:</strong> <span id="noteInfoCreatedValue"></span></div>
-                                                                    <div id="noteInfoActivity" style="display: none;" class="text-xs text-gray-600 space-y-0.5"><strong>Activity:</strong> <span id="noteInfoActivityValue"></span></div>
-                                                                    <div id="noteInfoEditsContainer" style="display: none;" class="text-xs text-gray-600">
-                                                                        <strong>Edits:</strong>
-                                                                        <div id="noteInfoEditsList" class=""></div> 
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                    <div class="md:w-1/3 space-y-2 mt-3 md:mt-0 flex flex-col"> 
-                                                        <div id="panelNotebookSelectorContainer" style="display:none;"> 
-                                                            <label for="panelNotebookSelector" class="block text-sm font-medium text-gray-700 mb-1">Notebook</label>
-                                                            <select id="panelNotebookSelector" class="input-field"></select>
-                                                            <p id="notebookChangeConfirmation" class="confirmation-message"></p> 
-                                                        </div>
-                                                        <div>
-                                                            <label for="noteTagsInputField_panel" class="block text-sm font-medium text-gray-700 mb-1">Tags</label>
-                                                            <div id="noteTagsContainer_panel" class="input-field tag-input-container">
-                                                                <input type="text" id="noteTagsInputField_panel" class="flex-grow outline-none text-sm" placeholder="Add a tag...">
-                                                            </div>
-                                                        </div>
-                                                        <div class="border-t pt-2 space-y-2 flex flex-col flex-grow min-h-0"> 
-                                                            <div id="panelCreationTimeContainer" style="display: none;"> <label class="block text-sm font-medium text-gray-700 mb-1">Creation Time</label>
-                                                                <p id="interactionPanelCreationTimeDisplayField" class="read-only-field"></p>
-                                                                <div class="flex mt-1" id="interactionPanelCreationTimeInputsContainer" style="display: none;">
-                                                                    <input type="date" id="interactionPanelCreationDateInputField" class="input-field w-1/2" title="Admin: Edit creation date.">
-                                                                    <input type="time" id="interactionPanelCreationTimeInputField_time" class="input-field w-1/2" title="Admin: Edit creation time.">
-                                                                </div>
-                                                            </div>
-                                                            <div id="panelActivityContainer" style="display: none;">
-                                                                <label class="block text-sm font-medium text-gray-700 mb-1">Activity</label>
-                                                                <p id="interactionPanelActivityDisplayField" class="read-only-field" style="display:none;"></p> 
-                                                                <input type="text" id="interactionPanelActivityInputField" class="input-field" placeholder="Relaxing in the living room on a Saturday morning">
-                                                            </div>
-                                                            <div id="interactionPanelCurrentEditSessionContainer" style="display:none;" class="mt-auto"> 
-                                                                <div><label for="interactionPanelEditsMadeInputField" class="block text-sm font-medium text-gray-700 mb-1">My edits ✏️</label><textarea id="interactionPanelEditsMadeInputField" rows="2" class="input-field" placeholder="Changes made..."></textarea></div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </form>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                <div id="noteInteractionPanel" class="note-interaction-panel flex-grow p-2 md:p-6 bg-white overflow-y-auto flex flex-col">
+                    <div id="noteInteractionPanelPlaceholder" class="flex-grow flex flex-col items-center justify-center text-gray-400">
+                        <i class="fas fa-feather fa-3x mb-4"></i>
+                        <p>Select a note to view or create a new one.</p>
+                    </div>
+                    <div id="noteInteractionFormContainer" class="hidden flex-grow flex flex-col">
+                        <form id="interactionPanelForm" class="flex-grow flex flex-col space-y-4">
+                            <input type="text" id="noteTitleInputField_panel" placeholder="Note Title" class="text-2xl font-semibold p-2 border-b-2 border-gray-200 focus:border-[var(--theme-border-accent)] outline-none transition-colors">
                             
-                            <div id="settings-content" class="main-view-content p-2 bg-white rounded-lg shadow"> 
-                                <h2 class="text-xl font-semibold mb-3 text-gray-700 flex-shrink-0">Settings</h2>
-                                <div class="md:flex md:space-x-6" style="flex-grow: 1; min-height: 0;">
-                                    <div class="md:w-1/4 space-y-1 mb-4 md:mb-0 flex-shrink-0">
-                                        <button data-setting-section="admin" class="settings-menu-item settings-menu-item-active w-full text-left px-3 py-2 rounded-md hover:bg-gray-100">Admin</button>
-                                        <button data-setting-section="tags" class="settings-menu-item w-full text-left px-3 py-2 rounded-md hover:bg-gray-100">Tags Management</button>
-                                        <button data-setting-section="appearance" class="settings-menu-item w-full text-left px-3 py-2 rounded-md hover:bg-gray-100">Appearance</button>
-                                        <button data-setting-section="export" class="settings-menu-item w-full text-left px-3 py-2 rounded-md hover:bg-gray-100">Export Data</button>
-                                    </div>
-                                    <div class="md:w-3/4 settings-content-area">
-                                        <div id="admin-settings-section" class="settings-content-section settings-content-section-active">
-                                            <h3 class="text-lg font-semibold text-gray-800 mb-3">Admin Settings</h3>
-                                            <div class="flex items-center justify-between p-3 border rounded-lg bg-gray-50"> 
-                                                <div>
-                                                    <h4 class="text-md font-medium text-gray-900">Admin Mode</h4>
-                                                    <p class="text-sm text-gray-500">Enable to edit normally non-editable fields like creation time and activity on existing notes.</p>
-                                                </div>
-                                                <label for="adminModeToggle" class="toggle-switch">
-                                                    <input type="checkbox" id="adminModeToggle">
-                                                    <span class="slider"></span>
-                                                </label>
-                                            </div>
-                                        </div>
-                                        <div id="tags-settings-section" class="settings-content-section">
-                                            <h3 class="text-lg font-semibold text-gray-800 mb-3">Manage All Tags</h3>
-                                            <div id="settingsTagsListContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3 tags-list-container pr-2"> 
-                                                 <p class="text-gray-500 w-full text-center py-4 md:col-span-full" id="settingsNoTagsMessage">No tags created yet.</p>
-                                            </div>
-                                        </div>
-                                        <div id="appearance-settings-section" class="settings-content-section">
-                                            <h3 class="text-lg font-semibold text-gray-800 mb-3">Appearance Settings</h3>
-                                            
-                                            <div class="p-3 border rounded-lg bg-gray-50 space-y-4">
-                                                <div> 
-                                                    <label for="defaultHomepageSelector" class="block text-sm font-medium text-gray-700 mb-1">Default Homepage</label>
-                                                    <select id="defaultHomepageSelector" class="input-field">
-                                                        <option value="notebooks">Notebooks</option>
-                                                        <option value="notes">All Notes</option>
-                                                        <option value="favorites">Favorites</option>
-                                                        <option value="trash">Trash</option>
-                                                    </select>
-                                                    <p class="text-xs text-gray-500 mt-1">Choose which page the app opens to by default.</p>
-                                                </div>
+                            <div id="panelNotebookSelectorContainer" class="mt-2" style="display:none;">
+                                <label for="panelNotebookSelector" class="block text-sm font-medium text-gray-700">Notebook:</label>
+                                <select id="panelNotebookSelector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)] sm:text-sm rounded-md"></select>
+                                <p id="notebookChangeConfirmation" class="text-xs text-green-600 mt-1"></p>
+                            </div>
 
-                                                <div class="border-t pt-4">
-                                                    <h4 class="text-md font-medium text-gray-900 mb-2">View Mode (All Notes Page)</h4>
-                                                    <div class="space-y-2">
-                                                        <div class="flex items-center">
-                                                            <input id="viewModeCompact" name="viewMode" type="radio" value="compact" checked class="focus:ring-emerald-500 h-4 w-4 text-emerald-600 border-gray-300">
-                                                            <label for="viewModeCompact" class="ml-3 block text-sm font-medium text-gray-700">
-                                                                Compact (List and editor side-by-side)
-                                                            </label>
-                                                        </div>
-                                                        <div class="flex items-center">
-                                                            <input id="viewModeComfortable" name="viewMode" type="radio" value="comfortable" class="focus:ring-emerald-500 h-4 w-4 text-emerald-600 border-gray-300">
-                                                            <label for="viewModeComfortable" class="ml-3 block text-sm font-medium text-gray-700">
-                                                                Comfortable (Full-page note grid, full-page editor)
-                                                            </label>
-                                                        </div>
-                                                    </div>
-                                                    <p class="text-xs text-gray-500 mt-1">Choose the layout for the "All Notes" page.</p>
-                                                </div>
-                                                <div class="border-t pt-4"> 
-                                                    <div class="flex justify-between items-center mb-2">
-                                                        <h4 class="text-md font-medium text-gray-900">Theme Colors</h4>
-                                                        <button id="resetThemeBtn" class="px-3 py-1 text-xs font-medium text-white rounded-md shadow-sm" style="background-color: var(--theme-bg-button-primary);">Reset Theme</button>
-                                                    </div>
-                                                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                                        <div>
-                                                            <label for="themeAppDefaultBgColorPicker" class="block text-sm font-medium text-gray-700 mb-1">Notes Default Background</label>
-                                                            <input type="color" id="themeAppDefaultBgColorPicker" data-theme-key="appDefaultBackgroundColor" class="theme-color-input w-full h-10 px-1 py-1 border border-gray-300 rounded-md shadow-sm">
-                                                            <p class="text-xs text-gray-500 mt-1">Used for note cards background and new tags default color.</p>
-                                                        </div>
-                                                        <div>
-                                                            <label for="themeSidebarBgColorPicker" class="block text-sm font-medium text-gray-700 mb-1">Sidebar Background</label>
-                                                            <input type="color" id="themeSidebarBgColorPicker" data-theme-key="themeSidebarBg" class="theme-color-input w-full h-10 px-1 py-1 border border-gray-300 rounded-md shadow-sm">
-                                                        </div>
-                                                        <div>
-                                                            <label for="themeButtonPrimaryColorPicker" class="block text-sm font-medium text-gray-700 mb-1">Primary Button Background</label>
-                                                            <input type="color" id="themeButtonPrimaryColorPicker" data-theme-key="themeButtonPrimary" class="theme-color-input w-full h-10 px-1 py-1 border border-gray-300 rounded-md shadow-sm">
-                                                        </div>
-                                                         <div>
-                                                            <label for="themeBorderAccentColorPicker" class="block text-sm font-medium text-gray-700 mb-1">Accent Border Color</label>
-                                                            <input type="color" id="themeBorderAccentColorPicker" data-theme-key="themeBorderAccent" class="theme-color-input w-full h-10 px-1 py-1 border border-gray-300 rounded-md shadow-sm">
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div class="border-t pt-4"> <div class="flex justify-between items-center mb-2">
-                                                        <h4 class="text-md font-medium text-gray-900">Color Palette</h4>
-                                                        <button id="editPaletteBtn" class="px-3 py-1 text-xs font-medium text-white rounded-md shadow-sm" style="background-color: var(--theme-bg-button-primary);">Edit Palette</button>
-                                                    </div>
-                                                    <div id="paletteColorsContainer" class="flex flex-wrap gap-2 mb-2">
-                                                        </div>
-                                                    <div class="flex items-center gap-2">
-                                                        <input type="color" id="newPaletteColorPicker" class="h-10 px-1 py-1 border border-gray-300 rounded-md shadow-sm">
-                                                        <button id="addPaletteColorBtn" class="px-3 py-2 text-sm font-medium text-white rounded-md shadow-sm" style="background-color: var(--theme-bg-button-primary);">
-                                                            <i class="fas fa-plus mr-1"></i> Add to Palette
-                                                        </button>
-                                                    </div>
-                                                     <p id="paletteLimitMessage" class="text-xs text-gray-500 mt-1"></p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div id="export-settings-section" class="settings-content-section">
-                                            <h3 class="text-lg font-semibold text-gray-800 mb-3">Export Notebook Data</h3>
-                                            <div class="p-3 border rounded-lg bg-gray-50 space-y-4">
-                                                <p class="text-sm text-gray-600">Select a notebook from the dropdown below and click 'Export Notebook' to download its content (including all notes, tags, and metadata) as a JSON file.</p>
-                                                <div>
-                                                    <label for="exportNotebookSelector" class="block text-sm font-medium text-gray-700 mb-1">Choose a notebook to export:</label>
-                                                    <select id="exportNotebookSelector" class="input-field"></select>
-                                                </div>
-                                                <button id="exportNotebookBtn" class="w-full px-4 py-2 text-sm font-medium text-white rounded-md shadow-sm" style="background-color: var(--theme-bg-button-primary);">
-                                                    <i class="fas fa-download mr-2"></i>Export Notebook as JSON
-                                                </button>
-                                                <p id="exportStatusMessage" class="text-xs text-gray-500 mt-1 h-4"></p>
-                                            </div>
-                                        </div>
-                                    </div>
+                            <textarea id="noteTextInputField_panel" placeholder="Start writing your note..." class="flex-grow p-2 border border-gray-200 rounded-md focus:border-[var(--theme-border-accent)] focus:ring-1 focus:ring-[var(--theme-border-accent)] outline-none resize-none leading-relaxed"></textarea>
+                            
+                            <div class="mt-2">
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Tags (up to 5, comma or Enter to add):</label>
+                                <div id="noteTagsContainer_panel" class="flex flex-wrap items-center p-2 border border-gray-200 rounded-md">
+                                    <input type="text" id="noteTagsInputField_panel" placeholder="Add tag..." class="flex-grow outline-none p-1 text-sm">
                                 </div>
                             </div>
 
-                            <div id="trash-content" class="main-view-content p-2 bg-white rounded-lg shadow">
-                                <div class="flex justify-between items-center mb-4 flex-shrink-0">
-                                    <h2 class="text-xl font-semibold text-gray-700">Trash</h2>
-                                    <button id="emptyTrashBtn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md shadow-sm disabled:opacity-50" disabled>Empty Trash</button>
-                                </div>
-                                <div id="deletedNotesListContainer">
-                                    <p id="noDeletedNotesMessage" class="text-gray-500 text-center py-4">Trash is empty.</p>
-                                </div>
-                            </div>
-
-                        </div>
-                    </main>
-                </div>
-
-                <div id="createNotebookModal" class="modal">
-                    <div class="modal-content" style="max-width: 500px;">
-                        <div class="modal-header"><h3 class="text-xl font-semibold text-gray-800">Create New Notebook</h3><button id="closeCreateNotebookModalBtn" class="text-gray-400 hover:text-gray-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button></div>
-                        <form id="createNotebookForm">
-                            <div class="modal-body space-y-4">
-                                <div><label for="cnNotebookTitleField" class="block text-sm font-medium text-gray-700 mb-1">Notebook Title</label><input type="text" id="cnNotebookTitleField" name="notebookTitle" required class="input-field" placeholder="My Class Notes"></div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Choose Cover Color (optional)</label>
-                                    <div id="cnNotebookCoverPaletteContainer" class="flex flex-wrap gap-2 mb-2 border p-2 rounded-md bg-gray-50 max-h-32 overflow-y-auto">
-                                        </div>
-                                    <input type="text" id="cnNotebookCoverColorDisplay" class="input-field mt-1" placeholder="Default: First palette color" readonly title="Selected cover color. Defaults to first palette color if none chosen.">
-                                </div>
-
-                                <div><label for="cnNotebookPurposeField" class="block text-sm font-medium text-gray-700 mb-1">Purpose of the Notebook</label><textarea id="cnNotebookPurposeField" name="notebookPurpose" rows="3" class="input-field" placeholder="Everything has a purpose in this Life. I am excited for mine ✨."></textarea></div>
-                            </div>
-                            <div class="modal-footer justify-end"><button type="button" id="cancelNotebookCreationBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md border">Cancel</button><button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-md shadow-sm" style="background-color: var(--theme-bg-button-primary);">Create Notebook</button></div> 
-                        </form>
-                    </div>
-                </div>
-
-                <div id="editNotebookModal" class="modal">
-                    <div class="modal-content" style="max-width: 500px;">
-                        <div class="modal-header">
-                            <h3 class="text-xl font-semibold text-gray-800">Edit Notebook</h3>
-                            <button id="closeEditNotebookModalBtn" class="text-gray-400 hover:text-gray-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
-                        </div>
-                        <form id="editNotebookForm">
-                            <input type="hidden" id="editingNotebookIdField">
-                            <div class="modal-body space-y-4">
-                                <div><label for="enNotebookTitleField" class="block text-sm font-medium text-gray-700 mb-1">Notebook Title</label><input type="text" id="enNotebookTitleField" required class="input-field" placeholder="My Class Notes"></div>
-                                
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Choose Cover Color</label>
-                                    <div id="enNotebookCoverPaletteContainer" class="flex flex-wrap gap-2 mb-2 border p-2 rounded-md bg-gray-50 max-h-32 overflow-y-auto">
-                                        </div>
-                                    <input type="text" id="enNotebookCoverColorDisplay" class="input-field mt-1" placeholder="Selected color (e.g., #RRGGBB)" readonly title="Selected cover color will appear here. Click a swatch above to change.">
-                                </div>
-
-                                <div><label for="enNotebookPurposeField" class="block text-sm font-medium text-gray-700 mb-1">Purpose of the Notebook</label><textarea id="enNotebookPurposeField" rows="3" class="input-field" placeholder="Everything has a purpose in this Life. I am excited for mine ✨."></textarea></div>
-                            </div>
-                            <div class="modal-footer justify-end"><button type="button" id="cancelNotebookEditBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md border">Cancel</button><button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-md shadow-sm" style="background-color: var(--theme-bg-button-primary);">Save Changes</button></div>
-                        </form>
-                    </div>
-                </div>
-                
-                <div id="editTagModal" class="modal">
-                    <div class="modal-content" style="max-width: 500px;">
-                        <div class="modal-header">
-                            <h3 class="text-xl font-semibold text-gray-800">Edit Tag</h3>
-                            <button id="closeEditTagModalBtn" class="text-gray-400 hover:text-gray-600">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                        </div>
-                        <form id="editTagForm">
-                            <input type="hidden" id="editingOriginalTagNameField">
-                            <input type="hidden" id="editingTagIdField"> 
-                            <div class="modal-body space-y-4">
-                                <div>
-                                    <label for="etTagNameField" class="block text-sm font-medium text-gray-700 mb-1">Tag Name</label>
-                                    <input type="text" id="etTagNameField" required class="input-field" placeholder="my-tag-name">
-                                </div>
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1">Tag Color</label>
-                                    <div id="editTagPaletteContainer" class="flex flex-wrap gap-2 mb-2">
-                                        </div>
-                                    <input type="text" id="etTagColorDisplay" class="input-field mt-1" placeholder="Selected color (e.g., #RRGGBB)" readonly title="Selected cover color will appear here. Click a swatch to change.">
-                                </div>
-                                <div>
-                                    <label for="etTagPurposeField" class="block text-sm font-medium text-gray-700 mb-1">Purpose</label>
-                                    <textarea id="etTagPurposeField" rows="3" class="input-field" placeholder="Describe the purpose of this tag..."></textarea>
+                            <div id="panelCreationTimeContainer" class="mt-2 text-sm" style="display:none;">
+                                <div id="interactionPanelCreationTimeDisplayField" class="flex items-center text-gray-600">
+                                    <i class="far fa-calendar-alt mr-2"></i>
+                                    <span></span> </div>
+                                <div id="interactionPanelCreationTimeInputsContainer" class="flex items-center space-x-2" style="display:none;">
+                                    <input type="date" id="interactionPanelCreationDateInputField" class="p-1 border rounded-md text-xs">
+                                    <input type="time" id="interactionPanelCreationTimeInputField_time" class="p-1 border rounded-md text-xs">
                                 </div>
                             </div>
-                            <div class="modal-footer">
-                                <button type="button" id="deleteTagBtn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md shadow-sm">Delete Tag</button>
-                                <div> <button type="button" id="cancelEditTagBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md border">Cancel</button>
-                                    <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-teal-600 hover:bg-teal-700 rounded-md shadow-sm" style="background-color: var(--theme-bg-button-primary);">Save Changes</button>
-                                </div>
+                            <div id="panelActivityContainer" class="mt-2" style="display:none;">
+                                <label for="interactionPanelActivityInputField" class="block text-sm font-medium text-gray-700">Activity:</label>
+                                <input type="text" id="interactionPanelActivityInputField" placeholder="e.g., Reading, Coding" class="mt-1 p-2 w-full border border-gray-300 rounded-md text-sm">
+                                <p id="interactionPanelActivityDisplayField" class="text-sm text-gray-600 mt-1" style="display:none;"></p>
+                            </div>
+                            <div id="interactionPanelCurrentEditSessionContainer" class="mt-2" style="display:none;">
+                                <label for="interactionPanelEditsMadeInputField" class="block text-sm font-medium text-gray-700">My Edits (this session):</label>
+                                <textarea id="interactionPanelEditsMadeInputField" placeholder="Describe changes made in this session..." class="mt-1 p-2 w-full border border-gray-300 rounded-md text-sm h-16 resize-none"></textarea>
                             </div>
                         </form>
-                    </div>
-                </div>
-
-                <div id="confirmTagDeleteModal" class="modal">
-                    <div class="modal-content" style="max-width: 450px;">
-                        <div class="modal-header">
-                            <h3 class="text-xl font-semibold text-red-700">Confirm Tag Deletion</h3>
-                            <button id="closeConfirmTagDeleteModalBtn" class="text-gray-400 hover:text-gray-600">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                        </div>
-                        <div class="modal-body">
-                            <p id="confirmTagDeleteMessage" class="text-sm text-gray-700 mb-2">Are you sure you want to delete the tag "<span id="tagNameToDeleteDisplay" class="font-semibold"></span>"?</p>
-                            <p class="text-xs text-red-600">This will remove the tag from all associated notes. This action cannot be undone.</p>
-                        </div>
-                        <div class="modal-footer justify-end">
-                            <button type="button" id="cancelTagDeletionBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md border">Cancel</button>
-                            <button type="button" id="executeTagDeletionBtn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md shadow-sm">Confirm Delete</button>
+                        <div id="noteInfoPanelContainer" class="mt-auto pt-4 border-t border-gray-200 text-xs text-gray-600 space-y-1" style="display:none;">
+                            <div id="noteInfoTags" style="display:none;"><strong>Tags:</strong> <span id="noteInfoTagsValue"></span></div>
+                            <div id="noteInfoCreated" style="display:none;"><strong>Created:</strong> <span id="noteInfoCreatedValue"></span></div>
+                            <div id="noteInfoActivity" style="display:none;"><strong>Activity:</strong> <span id="noteInfoActivityValue"></span></div>
+                            <div id="noteInfoEditsContainer" style="display:none;">
+                                <strong class="block mb-1">Edit History:</strong>
+                                <div id="noteInfoEditsList" class="max-h-24 overflow-y-auto text-xs"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
 
-                <div id="confirmNotebookDeleteModal" class="modal">
-                    <div class="modal-content" style="max-width: 450px;">
-                        <div class="modal-header">
-                            <h3 class="text-xl font-semibold text-red-700">Confirm Notebook Deletion</h3>
-                            <button id="closeConfirmNotebookDeleteModalBtn" class="text-gray-400 hover:text-gray-600">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                        </div>
-                        <div class="modal-body">
-                            <p id="confirmNotebookDeleteMessage" class="text-sm text-gray-700 mb-2">Are you sure you want to delete the notebook "<span id="notebookNameToDeleteDisplay" class="font-semibold"></span>" and move all its notes to the Trash?</p>
-                            <p class="text-xs text-red-600">This action cannot be undone directly, but notes can be restored from Trash individually.</p>
-                        </div>
-                        <div class="modal-footer justify-end">
-                            <button type="button" id="cancelNotebookDeletionBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md border">Cancel</button>
-                            <button type="button" id="executeNotebookDeletionBtn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md shadow-sm">Confirm Delete</button>
+        <div id="settings-content" class="main-view-content p-6 hidden">
+            <h1 class="text-3xl font-bold text-gray-800 mb-6">Settings</h1>
+            <div class="flex flex-col md:flex-row gap-6">
+                <div class="w-full md:w-1/4">
+                    <ul class="space-y-1 settings-menu">
+                        <li><button class="settings-menu-item settings-menu-item-active w-full text-left px-4 py-2 rounded-md hover:bg-gray-100" data-setting-section="admin">Admin</button></li>
+                        <li><button class="settings-menu-item w-full text-left px-4 py-2 rounded-md hover:bg-gray-100" data-setting-section="appearance">Appearance</button></li>
+                        <li><button class="settings-menu-item w-full text-left px-4 py-2 rounded-md hover:bg-gray-100" data-setting-section="tags">Manage Tags</button></li>
+                        <li><button class="settings-menu-item w-full text-left px-4 py-2 rounded-md hover:bg-gray-100" data-setting-section="export">Export</button></li>
+                    </ul>
+                </div>
+                <div class="flex-1">
+                    <div id="admin-settings-section" class="settings-content-section settings-content-section-active">
+                        <h2 class="text-xl font-semibold text-gray-700 mb-4">Admin Settings</h2>
+                        <div class="space-y-4 bg-white p-6 rounded-lg shadow">
+                            <div class="flex items-center justify-between">
+                                <label for="adminModeToggle" class="text-gray-700 font-medium">Enable Admin Mode:</label>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="adminModeToggle" class="sr-only peer">
+                                    <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[var(--theme-border-accent)] rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--theme-bg-button-primary)]"></div>
+                                </label>
+                            </div>
+                            <p class="text-sm text-gray-500">Admin mode allows editing creation dates and activities for notes.</p>
                         </div>
                     </div>
-                </div>
-
-                <div id="confirmNoteActionModal" class="modal">
-                    <div class="modal-content" style="max-width: 450px;">
-                        <div class="modal-header">
-                            <h3 id="confirmNoteActionTitle" class="text-xl font-semibold">Confirm Action</h3>
-                            <button id="closeConfirmNoteActionModalBtn" class="text-gray-400 hover:text-gray-600">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                        </div>
-                        <div class="modal-body">
-                            <p id="confirmNoteActionMessage" class="text-sm text-gray-700 mb-2"></p>
-                            <p id="confirmNoteActionWarning" class="text-xs text-red-600"></p>
-                        </div>
-                        <div class="modal-footer justify-end">
-                            <button type="button" id="cancelNoteActionBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md border">Cancel</button>
-                            <button type="button" id="executeNoteActionBtn" class="px-4 py-2 text-sm font-medium text-white rounded-md shadow-sm">Confirm</button>
-                        </div>
-                    </div>
-                </div>
-
-                <div id="restoreNoteWithOptionsModal" class="modal">
-                    <div class="modal-content" style="max-width: 500px;">
-                        <div class="modal-header">
-                            <h3 class="text-xl font-semibold text-gray-800">Restore Note Options</h3>
-                            <button id="closeRestoreNoteWithOptionsModalBtn" class="text-gray-400 hover:text-gray-600">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                        </div>
-                        <div class="modal-body space-y-4">
-                            <p id="restoreNoteOptionsMessage" class="text-sm text-gray-700"></p>
+                    <div id="appearance-settings-section" class="settings-content-section hidden">
+                        <h2 class="text-xl font-semibold text-gray-700 mb-4">Appearance</h2>
+                        <div class="space-y-6 bg-white p-6 rounded-lg shadow">
                             <div>
-                                <button id="restoreToNewNotebookBtn" class="w-full mb-3 px-4 py-2 text-sm font-medium text-white rounded-md shadow-sm" style="background-color: var(--theme-bg-button-primary);"></button>
+                                <label for="defaultHomepageSelector" class="block text-sm font-medium text-gray-700">Default Homepage</label>
+                                <select id="defaultHomepageSelector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)] sm:text-sm rounded-md">
+                                    <option value="notebooks">Notebooks</option>
+                                    <option value="notes">All Notes</option>
+                                    <option value="favorites">Favorites</option>
+                                </select>
+                            </div>
+                             <div>
+                                <span class="block text-sm font-medium text-gray-700">View Mode</span>
+                                <div class="mt-2 space-y-2">
+                                    <label for="viewModeCompact" class="flex items-center">
+                                        <input type="radio" id="viewModeCompact" name="viewMode" value="compact" class="focus:ring-[var(--theme-border-accent)] h-4 w-4 text-[var(--theme-bg-button-primary)] border-gray-300">
+                                        <span class="ml-2 text-sm text-gray-700">Compact</span>
+                                    </label>
+                                    <label for="viewModeComfortable" class="flex items-center">
+                                        <input type="radio" id="viewModeComfortable" name="viewMode" value="comfortable" class="focus:ring-[var(--theme-border-accent)] h-4 w-4 text-[var(--theme-bg-button-primary)] border-gray-300">
+                                        <span class="ml-2 text-sm text-gray-700">Comfortable</span>
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div><label class="block text-sm font-medium text-gray-700">App Background</label><input type="color" id="themeAppDefaultBgColorPicker" data-theme-key="appDefaultBackgroundColor" class="theme-color-input mt-1 w-full h-10 rounded-md border border-gray-300"></div>
+                                <div><label class="block text-sm font-medium text-gray-700">Sidebar Background</label><input type="color" id="themeSidebarBgColorPicker" data-theme-key="themeSidebarBg" class="theme-color-input mt-1 w-full h-10 rounded-md border border-gray-300"></div>
+                                <div><label class="block text-sm font-medium text-gray-700">Primary Button</label><input type="color" id="themeButtonPrimaryColorPicker" data-theme-key="themeButtonPrimary" class="theme-color-input mt-1 w-full h-10 rounded-md border border-gray-300"></div>
+                                <div><label class="block text-sm font-medium text-gray-700">Accent Border</label><input type="color" id="themeBorderAccentColorPicker" data-theme-key="themeBorderAccent" class="theme-color-input mt-1 w-full h-10 rounded-md border border-gray-300"></div>
                             </div>
                             <div>
-                                <label for="restoreToExistingNotebookSelector" class="block text-sm font-medium text-gray-700 mb-1">Or restore to an existing notebook:</label>
-                                <select id="restoreToExistingNotebookSelector" class="input-field"></select>
-                                <button id="restoreToSelectedNotebookBtn" class="w-full mt-2 px-4 py-2 text-sm font-medium text-white rounded-md shadow-sm" style="background-color: var(--theme-bg-button-primary);">Restore to Selected Notebook</button>
+                                <label class="block text-sm font-medium text-gray-700">Color Palette</label>
+                                <div id="paletteColorsContainer" class="mt-2 flex flex-wrap gap-2"></div>
+                                <div class="mt-3 flex items-center gap-2">
+                                    <input type="color" id="newPaletteColorPicker" class="h-10 w-16 rounded-md border border-gray-300">
+                                    <button id="addPaletteColorBtn" class="px-4 py-2 text-sm font-medium bg-[var(--theme-bg-button-primary)] hover:bg-[var(--theme-bg-button-primary-hover)] rounded-md shadow-sm">Add Color</button>
+                                    <button id="editPaletteBtn" class="px-4 py-2 text-sm font-medium bg-[var(--theme-bg-button-primary)] hover:bg-[var(--theme-bg-button-primary-hover)] rounded-md shadow-sm">Edit Palette</button>
+                                </div>
+                                <p id="paletteLimitMessage" class="text-xs text-gray-500 mt-1"></p>
                             </div>
+                            <button id="resetThemeBtn" class="w-full mt-4 px-4 py-2 text-sm font-medium bg-[var(--theme-bg-button-primary)] hover:bg-[var(--theme-bg-button-primary-hover)] rounded-md shadow-sm">Reset to Default Theme</button>
                         </div>
-                        <div class="modal-footer justify-end">
-                            <button type="button" id="cancelRestoreWithOptionsBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md border">Cancel</button>
+                    </div>
+                     <div id="tags-settings-section" class="settings-content-section hidden">
+                        <h2 class="text-xl font-semibold text-gray-700 mb-4">Manage Tags</h2>
+                        <div id="settingsTagsListContainer" class="space-y-3">
+                            </div>
+                        <p id="settingsNoTagsMessage" class="text-center text-gray-500 mt-6 hidden">No tags created yet.</p>
+                    </div>
+                    <div id="export-settings-section" class="settings-content-section hidden">
+                        <h2 class="text-xl font-semibold text-gray-700 mb-4">Export Data</h2>
+                        <div class="bg-white p-6 rounded-lg shadow">
+                            <label for="exportNotebookSelector" class="block text-sm font-medium text-gray-700">Select Notebook to Export</label>
+                            <select id="exportNotebookSelector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)] sm:text-sm rounded-md">
+                                </select>
+                            <button id="exportNotebookBtn" class="mt-4 w-full px-4 py-2 text-sm font-medium bg-[var(--theme-bg-button-primary)] hover:bg-[var(--theme-bg-button-primary-hover)] rounded-md shadow-sm">Export Notebook (JSON)</button>
+                            <p id="exportStatusMessage" class="text-sm mt-2"></p>
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
 
-                <div id="confirmEmptyTrashModal" class="modal">
-                    <div class="modal-content" style="max-width: 450px;">
-                        <div class="modal-header">
-                            <h3 class="text-xl font-semibold text-red-700">Confirm Empty Trash</h3>
-                            <button id="closeConfirmEmptyTrashModalBtn" class="text-gray-400 hover:text-gray-600">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                        </div>
-                        <div class="modal-body">
-                            <p class="text-sm text-gray-700 mb-2">Are you sure you want to permanently delete all notes in the Trash?</p>
-                            <p class="text-xs text-red-600">This action cannot be undone.</p>
-                        </div>
-                        <div class="modal-footer justify-end">
-                            <button type="button" id="cancelEmptyTrashBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md border">Cancel</button>
-                            <button type="button" id="executeEmptyTrashBtn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md shadow-sm">Confirm Empty Trash</button>
-                        </div>
+        <div id="trash-content" class="main-view-content p-6 hidden">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-3xl font-bold text-gray-800">Trash</h1>
+                <button id="emptyTrashBtn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md shadow-sm disabled:opacity-50">Empty Trash</button>
+            </div>
+            <div id="deletedNotesListContainer" class="space-y-3">
+                </div>
+            <p id="noDeletedNotesMessage" class="text-center text-gray-500 mt-10 hidden">Trash is empty.</p>
+        </div>
+
+        <button id="fabCreateNote" class="fixed bottom-6 right-6 bg-[var(--theme-bg-button-primary)] hover:bg-[var(--theme-bg-button-primary-hover)] text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl z-30 transition-transform hover:scale-110">
+            <i class="fas fa-plus"></i>
+        </button>
+        <button id="fabNavigateBack" class="fixed bottom-6 left-36 bg-gray-600 hover:bg-gray-700 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center text-2xl z-30 transition-transform hover:scale-110 hidden">
+            <i class="fas fa-arrow-left"></i>
+        </button>
+
+    </main>
+
+    <div id="createNotebookModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-40 hidden">
+        <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-semibold text-gray-800">Create New Notebook</h2>
+                <button id="closeCreateNotebookModalBtn" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+            </div>
+            <form id="createNotebookForm">
+                <div class="mb-4">
+                    <label for="cnNotebookTitleField" class="block text-sm font-medium text-gray-700">Title</label>
+                    <input type="text" id="cnNotebookTitleField" required class="mt-1 p-2 w-full border border-gray-300 rounded-md shadow-sm focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)]">
+                </div>
+                <div class="mb-4">
+                    <label for="cnNotebookPurposeField" class="block text-sm font-medium text-gray-700">Purpose (Optional)</label>
+                    <textarea id="cnNotebookPurposeField" rows="3" class="mt-1 p-2 w-full border border-gray-300 rounded-md shadow-sm focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)]"></textarea>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700">Cover Color (Optional)</label>
+                    <input type="text" id="cnNotebookCoverColorDisplay" readonly class="mt-1 p-2 w-full border border-gray-300 rounded-md bg-gray-50 text-center" placeholder="Select from palette">
+                    <div id="cnNotebookCoverPaletteContainer" class="mt-2 flex flex-wrap gap-2 max-h-24 overflow-y-auto p-1 border rounded-md"></div>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" id="cancelNotebookCreationBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md shadow-sm">Cancel</button>
+                    <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-[var(--theme-bg-button-primary)] hover:bg-[var(--theme-bg-button-primary-hover)] rounded-md shadow-sm">Create Notebook</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="editNotebookModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-40 hidden">
+        <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-semibold text-gray-800">Edit Notebook</h2>
+                <button id="closeEditNotebookModalBtn" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+            </div>
+            <form id="editNotebookForm">
+                <input type="hidden" id="editingNotebookIdField">
+                <div class="mb-4">
+                    <label for="enNotebookTitleField" class="block text-sm font-medium text-gray-700">Title</label>
+                    <input type="text" id="enNotebookTitleField" required class="mt-1 p-2 w-full border border-gray-300 rounded-md shadow-sm focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)]">
+                </div>
+                <div class="mb-4">
+                    <label for="enNotebookPurposeField" class="block text-sm font-medium text-gray-700">Purpose (Optional)</label>
+                    <textarea id="enNotebookPurposeField" rows="3" class="mt-1 p-2 w-full border border-gray-300 rounded-md shadow-sm focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)]"></textarea>
+                </div>
+                 <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700">Cover Color</label>
+                    <input type="text" id="enNotebookCoverColorDisplay" readonly class="mt-1 p-2 w-full border border-gray-300 rounded-md bg-gray-50 text-center">
+                    <div id="enNotebookCoverPaletteContainer" class="mt-2 flex flex-wrap gap-2 max-h-24 overflow-y-auto p-1 border rounded-md"></div>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" id="cancelNotebookEditBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md shadow-sm">Cancel</button>
+                    <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-[var(--theme-bg-button-primary)] hover:bg-[var(--theme-bg-button-primary-hover)] rounded-md shadow-sm">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="editTagModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-40 hidden">
+        <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-2xl font-semibold text-gray-800">Edit Tag</h2>
+                <button id="closeEditTagModalBtn" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+            </div>
+            <form id="editTagForm">
+                <input type="hidden" id="editingTagIdField">
+                <input type="hidden" id="editingOriginalTagNameField">
+                <div class="mb-4">
+                    <label for="etTagNameField" class="block text-sm font-medium text-gray-700">Tag Name</label>
+                    <input type="text" id="etTagNameField" required class="mt-1 p-2 w-full border border-gray-300 rounded-md shadow-sm focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)]">
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700">Tag Color</label>
+                    <input type="text" id="etTagColorDisplay" readonly class="mt-1 p-2 w-full border border-gray-300 rounded-md bg-gray-50 text-center">
+                    <div id="editTagPaletteContainer" class="mt-2 flex flex-wrap gap-2 max-h-24 overflow-y-auto p-1 border rounded-md"></div>
+                </div>
+                <div class="mb-6">
+                    <label for="etTagPurposeField" class="block text-sm font-medium text-gray-700">Purpose (Optional)</label>
+                    <textarea id="etTagPurposeField" rows="2" class="mt-1 p-2 w-full border border-gray-300 rounded-md shadow-sm focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)]"></textarea>
+                </div>
+                <div class="flex justify-between items-center">
+                    <button type="button" id="deleteTagBtn" class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md shadow-sm">Delete Tag</button>
+                    <div class="space-x-3">
+                        <button type="button" id="cancelEditTagBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md shadow-sm">Cancel</button>
+                        <button type="submit" class="px-4 py-2 text-sm font-medium text-white bg-[var(--theme-bg-button-primary)] hover:bg-[var(--theme-bg-button-primary-hover)] rounded-md shadow-sm">Save Changes</button>
                     </div>
                 </div>
+            </form>
+        </div>
+    </div>
 
-
-                <div id="confirmThemeResetModal" class="modal">
-                    <div class="modal-content" style="max-width: 450px;">
-                        <div class="modal-header">
-                            <h3 class="text-xl font-semibold text-gray-800">Confirm Theme Reset</h3>
-                            <button id="closeConfirmThemeResetModalBtn" class="text-gray-400 hover:text-gray-600">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                            </button>
-                        </div>
-                        <div class="modal-body">
-                            <p class="text-sm text-gray-700 mb-2">Are you sure you want to reset the theme to the default Green theme? This will also reset your color palette and default homepage to 'Notebooks'.</p>
-                            <p class="text-xs text-gray-600">This action cannot be undone.</p>
-                        </div>
-                        <div class="modal-footer justify-end">
-                            <button type="button" id="cancelThemeResetBtn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md border">Cancel</button>
-                            <button type="button" id="executeThemeResetBtn" class="px-4 py-2 text-sm font-medium text-white rounded-md shadow-sm" style="background-color: var(--theme-bg-button-primary);">Confirm Reset</button>
-                        </div>
-                    </div>
+    <div id="confirmTagDeleteModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full">
+            <div class="flex justify-between items-start mb-3">
+                <h3 class="text-lg font-medium text-gray-900">Confirm Deletion</h3>
+                <button id="closeConfirmTagDeleteModalBtn" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <p class="text-sm text-gray-600 mb-1">Are you sure you want to delete the tag "<span id="tagNameToDeleteDisplay" class="font-semibold"></span>"?</p>
+            <p class="text-xs text-red-500 mb-4">This will remove the tag from all associated notes. This action cannot be undone.</p>
+            <div class="flex justify-end space-x-2">
+                <button id="cancelTagDeletionBtn" class="px-3 py-1.5 text-sm rounded-md bg-gray-200 hover:bg-gray-300 text-gray-700">Cancel</button>
+                <button id="executeTagDeletionBtn" class="px-3 py-1.5 text-sm rounded-md bg-red-600 hover:bg-red-700 text-white">Delete Tag</button>
+            </div>
+        </div>
+    </div>
+    <div id="confirmNotebookDeleteModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full">
+            <div class="flex justify-between items-start mb-3">
+                <h3 class="text-lg font-medium text-gray-900">Confirm Notebook Deletion</h3>
+                <button id="closeConfirmNotebookDeleteModalBtn" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <p class="text-sm text-gray-600 mb-1">Are you sure you want to delete the notebook "<span id="notebookNameToDeleteDisplay" class="font-semibold"></span>"?</p>
+            <p class="text-xs text-red-500 mb-4">All notes within this notebook will be moved to Trash. This action cannot be undone directly for the notebook itself.</p>
+            <div class="flex justify-end space-x-2">
+                <button id="cancelNotebookDeletionBtn" class="px-3 py-1.5 text-sm rounded-md bg-gray-200 hover:bg-gray-300 text-gray-700">Cancel</button>
+                <button id="executeNotebookDeletionBtn" class="px-3 py-1.5 text-sm rounded-md bg-red-600 hover:bg-red-700 text-white">Delete Notebook</button>
+            </div>
+        </div>
+    </div>
+     <div id="confirmNoteActionModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full">
+            <div class="flex justify-between items-start mb-3">
+                <h3 id="confirmNoteActionTitle" class="text-lg font-medium text-gray-900">Confirm Action</h3>
+                <button id="closeConfirmNoteActionModalBtn" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <p id="confirmNoteActionMessage" class="text-sm text-gray-600 mb-1"></p>
+            <p id="confirmNoteActionWarning" class="text-xs text-red-500 mb-4"></p>
+            <div class="flex justify-end space-x-2">
+                <button id="cancelNoteActionBtn" class="px-3 py-1.5 text-sm rounded-md bg-gray-200 hover:bg-gray-300 text-gray-700">Cancel</button>
+                <button id="executeNoteActionBtn" class="px-3 py-1.5 text-sm rounded-md text-white">Confirm</button>
+            </div>
+        </div>
+    </div>
+    <div id="confirmThemeResetModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full">
+             <div class="flex justify-between items-start mb-3">
+                <h3 class="text-lg font-medium text-gray-900">Reset Theme?</h3>
+                <button id="closeConfirmThemeResetModalBtn" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <p class="text-sm text-gray-600 mb-4">Are you sure you want to reset all theme and color palette settings to their defaults?</p>
+            <div class="flex justify-end space-x-2">
+                <button id="cancelThemeResetBtn" class="px-3 py-1.5 text-sm rounded-md bg-gray-200 hover:bg-gray-300 text-gray-700">Cancel</button>
+                <button id="executeThemeResetBtn" class="px-3 py-1.5 text-sm rounded-md bg-orange-500 hover:bg-orange-600 text-white">Reset Theme</button>
+            </div>
+        </div>
+    </div>
+    <div id="restoreNoteWithOptionsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+            <div class="flex justify-between items-start mb-3">
+                <h3 class="text-lg font-medium text-gray-900">Restore Note Options</h3>
+                <button id="closeRestoreNoteWithOptionsModalBtn" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <p id="restoreNoteOptionsMessage" class="text-sm text-gray-600 mb-4"></p>
+            <div class="space-y-3">
+                <button id="restoreToNewNotebookBtn" class="w-full px-4 py-2 text-sm font-medium text-white bg-[var(--theme-bg-button-primary)] hover:bg-[var(--theme-bg-button-primary-hover)] rounded-md shadow-sm">Create new notebook and restore</button>
+                <div>
+                    <label for="restoreToExistingNotebookSelector" class="block text-sm font-medium text-gray-700">Or restore to existing notebook:</label>
+                    <select id="restoreToExistingNotebookSelector" class="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-[var(--theme-border-accent)] focus:border-[var(--theme-border-accent)] sm:text-sm rounded-md"></select>
+                    <button id="restoreToSelectedNotebookBtn" class="mt-2 w-full px-4 py-2 text-sm font-medium text-white bg-[var(--theme-bg-button-primary)] hover:bg-[var(--theme-bg-button-primary-hover)] rounded-md shadow-sm disabled:opacity-50" disabled>Restore to Selected</button>
                 </div>
-                
-                <button id="fabCreateNote" class="fab" title="Create New Note">
-                    <i class="fas fa-plus"></i>
-                </button>
-                <button id="fabNavigateBack" class="fab fab-back hidden" title="Go Back">
-                    <i class="fas fa-arrow-left"></i>
-                </button>
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button id="cancelRestoreWithOptionsBtn" class="px-3 py-1.5 text-sm rounded-md bg-gray-200 hover:bg-gray-300 text-gray-700">Cancel</button>
+            </div>
+        </div>
+    </div>
+     <div id="confirmEmptyTrashModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full">
+             <div class="flex justify-between items-start mb-3">
+                <h3 class="text-lg font-medium text-gray-900">Empty Trash?</h3>
+                <button id="closeConfirmEmptyTrashModalBtn" class="text-gray-400 hover:text-gray-600">&times;</button>
+            </div>
+            <p class="text-sm text-gray-600 mb-1">Are you sure you want to permanently delete all notes in the trash?</p>
+            <p class="text-xs text-red-500 mb-4">This action cannot be undone.</p>
+            <div class="flex justify-end space-x-2">
+                <button id="cancelEmptyTrashBtn" class="px-3 py-1.5 text-sm rounded-md bg-gray-200 hover:bg-gray-300 text-gray-700">Cancel</button>
+                <button id="executeEmptyTrashBtn" class="px-3 py-1.5 text-sm rounded-md bg-red-600 hover:bg-red-700 text-white">Empty Trash</button>
+            </div>
+        </div>
+    </div>
 
-                <script src="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@bhu7/app.js" type="module"></script>
-            </body>
-            </html>
-            
+    <script type="module" src="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@main/core-logic.js"></script>
+    <script type="module" src="https://cdn.jsdelivr.net/gh/amritcrome/My-Notes@main/ui-handlers.js"></script>
+</body>
+</html>
